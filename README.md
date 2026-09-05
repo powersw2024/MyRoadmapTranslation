@@ -58,7 +58,9 @@ cargo run --release
 cd frontend && npm run dev   # http://localhost:5173，/api 自动代理到 8080
 ```
 
-环境变量：`RUSTWAY_PORT`（默认 8080）、`RUSTWAY_CONTENT`（默认 `content`）、`RUSTWAY_STATIC`（默认 `frontend/dist`）。
+环境变量：`RUSTWAY_PORT`（默认 8080）、`RUSTWAY_CONTENT`（默认 `content`）、`RUSTWAY_STATIC`（默认 `frontend/dist`）、`RUSTWAY_DATA`（SQLite 数据目录，默认 `data`，主备双库）。
+
+AI 评价配置（可选）：站内「⚙️ AI 设置」页可直接保存到本机 SQLite（即时生效，优先级更高）；或用环境变量 `RUSTWAY_AI_BACKEND`（`ollama` | `openai`）/ `RUSTWAY_AI_BASE_URL` / `RUSTWAY_AI_MODEL` / `RUSTWAY_AI_API_KEY` 作为回退。不配置不影响编程题判分。
 
 ## 架构
 

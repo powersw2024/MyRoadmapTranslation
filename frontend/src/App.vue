@@ -71,7 +71,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <a class="icon-link" href="#/works" title="我的作品" @click.prevent="go('/works')">🗂️</a>
-    <a class="icon-link" href="#/ai" title="AI 代码评价" @click.prevent="go('/ai')">⚙️</a>
+    <a class="icon-link" href="#/ai" title="AI 设置" @click.prevent="go('/ai')">⚙️</a>
 
     <ThemeToggle />
   </header>

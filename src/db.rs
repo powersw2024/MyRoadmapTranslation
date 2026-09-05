@@ -185,6 +185,47 @@ impl Db {
         )
         .map_err(|e| format!("提交不存在: {e}"))
     }
+
+    // ---------------- AI 配置（设置页持久化；环境变量作为缺省回退） ----------------
+
+    /// 读取完整 AI 配置（含密钥，仅供服务端内部调用；HTTP 响应必须掩码）。
+    pub fn get_ai_config_full(&self) -> Option<(String, String, String, Option<String>)> {
+        let conn = self.conn.lock().ok()?;
+        conn.query_row(
+            "SELECT backend, base_url, model, api_key FROM ai_config WHERE id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .ok()
+    }
+
+    /// 保存 AI 配置；api_key 传 None 表示保留原值，传空串表示清除。
+    pub fn save_ai_config(
+        &self,
+        backend: &str,
+        base_url: &str,
+        model: &str,
+        api_key: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        match api_key {
+            Some(key) => conn
+                .execute(
+                    "INSERT INTO ai_config (id, backend, base_url, model, api_key) VALUES (1, ?1, ?2, ?3, ?4) \
+                     ON CONFLICT(id) DO UPDATE SET backend = ?1, base_url = ?2, model = ?3, api_key = ?4",
+                    rusqlite::params![backend, base_url, model, key],
+                )
+                .map(|_| ()),
+            None => conn
+                .execute(
+                    "INSERT INTO ai_config (id, backend, base_url, model, api_key) VALUES (1, ?1, ?2, ?3, NULL) \
+                     ON CONFLICT(id) DO UPDATE SET backend = ?1, base_url = ?2, model = ?3",
+                    rusqlite::params![backend, base_url, model],
+                )
+                .map(|_| ()),
+        }
+        .map_err(|e| format!("保存 AI 配置失败: {e}"))
+    }
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {
@@ -465,6 +506,64 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM placement", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1, "备库应包含主库全部映射");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ai_config_roundtrip_and_key_semantics() {
+        // 直接构造最小 Db（ai_config 读写只依赖 conn，不需要全量同步的 Store）
+        let dir = std::env::temp_dir().join(format!("rustway-aicfg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = Connection::open(dir.join("t.db")).unwrap();
+        init_schema(&conn).unwrap();
+        let db = Db {
+            snapshot: DbSnapshot {
+                placements: vec![],
+                prereq_edges: vec![],
+                similar_edges: vec![],
+                primary_path: dir.join("t.db"),
+                backup_path: dir.join("t-backup.db"),
+                synced_at: String::new(),
+            },
+            conn: Mutex::new(conn),
+            data_dir: dir.clone(),
+        };
+
+        // 初始无配置
+        assert!(db.get_ai_config_full().is_none());
+        // 保存（含密钥）→ 回读一致
+        db.save_ai_config(
+            "ollama",
+            "http://127.0.0.1:11434",
+            "qwen2.5-coder:7b",
+            Some("sk-test"),
+        )
+        .unwrap();
+        let (b, u, m, k) = db.get_ai_config_full().unwrap();
+        assert_eq!(b, "ollama");
+        assert_eq!(u, "http://127.0.0.1:11434");
+        assert_eq!(m, "qwen2.5-coder:7b");
+        assert_eq!(k.as_deref(), Some("sk-test"));
+        // api_key=None → 保留原密钥（设置页未填新密钥时不清空）
+        db.save_ai_config("openai", "https://api.openai.com/v1", "gpt-4o-mini", None)
+            .unwrap();
+        let (b, _, _, k) = db.get_ai_config_full().unwrap();
+        assert_eq!(b, "openai", "None 只更新其余字段");
+        assert_eq!(k.as_deref(), Some("sk-test"), "None 应保留原密钥");
+        // api_key=Some("") → 显式清除（读回不可用，即 apiKeySet=false）
+        db.save_ai_config(
+            "openai",
+            "https://api.openai.com/v1",
+            "gpt-4o-mini",
+            Some(""),
+        )
+        .unwrap();
+        let (_, _, _, k) = db.get_ai_config_full().unwrap();
+        assert!(
+            k.as_deref().map(|s| s.is_empty()).unwrap_or(true),
+            "清除后不应残留可用密钥"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
