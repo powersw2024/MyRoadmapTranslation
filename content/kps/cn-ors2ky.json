@@ -1,0 +1,58 @@
+{
+  "kps": [
+    {
+      "id": "cn-ors2ky2u",
+      "title": "剑指 Offer 7：重建二叉树（前序+中序）",
+      "difficulty": 3,
+      "minutes": 30,
+      "summary": "前序首元素定根、中序定位分左右：用哈希缓存中序索引，递归切分重建二叉树，O(N)。",
+      "outline": [
+        "题目：给出不含重复值的前序遍历与中序遍历结果，重建二叉树",
+        "核心性质：前序序列第一个值是根；在中序序列中定位根，左边是左子树的中序、右边是右子树的中序；左子树长度 = 中序根位置 - inL，据此切出左子树的前序区间",
+        "加速：用 HashMap 缓存「中序值 → 索引」，把每层定位从 O(N) 降到 O(1)，总复杂度 O(N)",
+        "Rust 实现（已验证：中序还原 [9, 3, 15, 20, 7]、前序还原 [3, 9, 20, 15, 7]）：节点用 Option<Box<TreeNode>>，HashMap 由 `inorder.iter().enumerate().map(|(i,&v)| (v,i)).collect()` 构建",
+        "Python 实现（已验证同样输出）：闭包 build(pre_l, pre_r, in_l) 直接递归，字典推导 `{v:i for i,v in enumerate(in_order)}` 建索引",
+        "验证方法值得记住：重建结果不能肉眼看，用「中序遍历应还原输入中序、前序遍历应还原输入前序」做双向核对（实测中曾靠它抓到中序遍历漏掉右子树递归的 bug）",
+        "复杂度：哈希定位后 T(N) = O(N)；无哈希时最坏（链状树）退化为 O(N²)"
+      ],
+      "prereqs": ["cn-243ut3ja"],
+      "task": "分别用 Python 与 Rust 实现 reconstruct，对前序 [1,2,4,7,3,5,6,8] / 中序 [4,7,2,1,5,3,8,6]（教材经典用例）重建；自写中序+前序双遍历核对输出与输入一致后，再提交牛客网通过。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CS-Notes-master/notes/7. 重建二叉树.md",
+          "u": "https://github.com/CyC2018/CS-Notes/blob/master/notes/7.%20%E9%87%8D%E5%BB%BA%E4%BA%8C%E5%8F%89%E6%A0%91.md"
+        },
+        {
+          "t": "牛客网：重建二叉树（在线判题）",
+          "u": "https://www.nowcoder.com/practice/8a19cbe657394eeaac2f6ea9b0f6fcf6?tpId=13&tqId=11157"
+        },
+        {
+          "t": "Rust 标准库：HashMap（collect 构建映射）",
+          "u": "https://doc.rust-lang.org/std/collections/struct.HashMap.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "重建二叉树时为什么必须有「中序」？只有前序和后序行不行？",
+          "opts": [
+            "行不行都一样，随便一棵树都行",
+            "前序定根后，只有中序能把左右子树的序列分开；前序+后序在「只有一个孩子的节点」上无法区分左右，答案不唯一",
+            "因为中序是最快的遍历",
+            "因为中序没有重复元素"
+          ],
+          "answer": 1,
+          "why": "前序+中序、后序+中序可唯一重建；前序+后序无法区分单孩子节点是其左孩子还是右孩子，重建不唯一。"
+        },
+        {
+          "kind": "blank",
+          "q": "已知中序根位置 inIndex 与当前区间左端 inL，左子树的节点数为 __（用符号表示）。",
+          "accept": ["inIndex-inL", "inIndex - inL", "inindex-inl"],
+          "why": "中序中根左边的元素全部属于左子树，其数量就是左子树规模，用于切分前序区间。"
+        }
+      ],
+      "domain": "算法",
+      "tags": ["二叉树", "递归", "哈希", "剑指Offer"],
+      "author": "powersw2024"
+    }
+  ]
+}
