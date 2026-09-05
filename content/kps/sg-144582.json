@@ -1,0 +1,54 @@
+{
+  "kps": [
+    {
+      "id": "sg-144582nf",
+      "title": "Stanford CS346：RedBase 数据库实现",
+      "difficulty": 3,
+      "minutes": 600,
+      "summary": "斯坦福数据库实现课：在高度结构化的 RedBase 项目中实现记录管理、B+ 索引、系统管理与 RQL 查询语言，适合作为 15-445 的续作。",
+      "outline": [
+        "课程定位：Stanford CS346，核心项目 RedBase——实现一个简易但结构完整的数据库系统，代码量不大、便于按需扩展",
+        "组件一：Record Management Component 记录管理组件（页/槽的物理布局与增删改查）",
+        "组件二：Index Component B+ 索引管理（对应 15-445 的 Project#2，可迁移实现）",
+        "组件三：System Management Component——DDL 语句、命令行工具、数据加载命令与元数据管理",
+        "组件四：Query Language Component——实现 RedBase 查询语言 RQL 的 select/insert/delete/update",
+        "组件五：Extension Component——扩展件任选：Blob 类型、网络模块、连接算法、CBO 优化器、OLAP、事务等",
+        "对 Rust/Python 学习者：原项目为 C++；可用 Rust 重写记录管理层（生命周期与所有权天然管理页缓冲），Python 实现元数据目录与 SQL 解析原型（sqlite3 模块可作基准）",
+        "先修与衔接：官方未设硬性先修，建议学完 CMU 15-445 后继续，用于练习系统组件的完整拼装"
+      ],
+      "prereqs": ["sg-glb6w7ub"],
+      "task": "用 Rust 搭出 RedBase 的记录管理核心：定长槽页（slotted page）的 insert/delete/scan 三操作，槽位带空闲位图；用 1000 条随机插入删除后 scan 应恰好返回存活记录集合（与 Python dict 基准一致）——差分一致即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/数据库系统/CS346.md",
+          "u": "https://web.stanford.edu/class/cs346/2015/"
+        },
+        {
+          "t": "Stanford CS346 课程网站（2015）",
+          "u": "https://web.stanford.edu/class/cs346/2015/"
+        },
+        {
+          "t": "RedBase 课程项目代码框架（junkumar/redbase）",
+          "u": "https://github.com/junkumar/redbase"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "RedBase 项目的四个基础 lab 不包括下列哪一项？",
+          "opts": ["记录管理组件", "B+ 索引管理", "RQL 查询语言组件", "训练卷积神经网络"],
+          "answer": 3,
+          "why": "RedBase 由记录管理、B+ 索引、系统管理（DDL/加载/元数据）、RQL 查询语言四个 lab 组成，另有可选的扩展组件；神经网络与其无关。"
+        },
+        {
+          "kind": "subjective",
+          "prompt": "对比「定长记录页」与「槽式页（slotted page）」在变长记录下的空间利用率与实现复杂度。",
+          "reference": "1) 定长页：实现最简单，槽位大小固定，但变长记录要按最大长度预留，内部碎片大；\n2) 槽式页：页头维护槽数组（slot directory），记录从页尾向前堆放，槽指针指向记录，支持变长与页内整理，空间利用率高；\n3) 复杂度：槽式页需要处理槽数组与记录区的相向增长、删除后空间回收（压实或空闲链表），复杂度明显高于定长；\n4) 数据库实践中变长记录普遍采用槽式页（如 PostgreSQL 堆页）。",
+          "why": "考察记录管理组件最核心的存储结构权衡，是完成 RedBase 记录管理 lab 的概念基础。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["数据库", "RedBase", "存储引擎", "课程导航"],
+      "author": "powersw2024"
+    }
+  ]
+}
