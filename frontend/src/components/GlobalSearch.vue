@@ -63,7 +63,7 @@ function onKey(e) {
     <input
       v-model="q"
       type="search"
-      placeholder="搜索知识点…（如：所有权 / B+ 树 / epoll）"
+      placeholder="搜索知识点…"
       @focus="open = true"
       @keydown="onKey"
     />

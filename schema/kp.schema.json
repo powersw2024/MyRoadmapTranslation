@@ -50,7 +50,7 @@
     "task": {
       "type": "string",
       "minLength": 20,
-      "description": "动手验证任务：写清『做什么 + 如何客观确认做对了』，须在终端或测试中可完成"
+      "description": "动手验证任务：写清『做什么 + 如何客观确认做对了』；应是可检验的实践产出（运行结果/完成的作品/通过的测试等），不限领域"
     },
     "refs": {
       "type": "array",
@@ -69,28 +69,53 @@
     "quiz": {
       "type": "array",
       "minItems": 1,
-      "description": "自测题（测试用例）：题干须独立可答（先答后看），干扰项要有迷惑性，解析说明『为什么对、为什么错』。答对全部题目会自动点亮『掌握』状态。",
+      "description": "测试用例：支持三种题型（kind 缺省为 choice 选择题）。答对全部题目会自动点亮『掌握』状态。编程题由服务端 rustc 沙箱编译运行，并可经 AI 后端（本地 Ollama / OpenAI 兼容 API）做代码结构评价。",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["q", "opts", "answer", "why"],
-        "properties": {
-          "q": { "type": "string", "minLength": 8, "description": "题干" },
-          "opts": {
-            "type": "array",
-            "minItems": 2,
-            "maxItems": 6,
-            "items": { "type": "string", "minLength": 1 },
-            "description": "选项，2~6 个"
+        "anyOf": [
+          {
+            "title": "选择题（kind 缺省 = choice）",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q", "opts", "answer", "why"],
+            "properties": {
+              "kind": { "const": "choice" },
+              "q": { "type": "string", "minLength": 8, "description": "题干，独立可答（先答后看）" },
+              "opts": { "type": "array", "minItems": 2, "maxItems": 6, "items": { "type": "string", "minLength": 1 }, "description": "选项" },
+              "answer": { "type": "integer", "minimum": 0, "description": "正确项下标（0 起），必须小于 opts 长度（服务端校验）" },
+              "why": { "type": "string", "minLength": 4, "description": "解析" }
+            }
           },
-          "answer": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "正确选项下标（0 起）。必须小于 opts 长度——该跨字段约束由服务端校验器强制执行"
+          {
+            "title": "填空题（blank）",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "q", "accept", "why"],
+            "properties": {
+              "kind": { "const": "blank" },
+              "q": { "type": "string", "minLength": 8, "description": "题干，用 __ 标出空位" },
+              "accept": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "可接受答案列表（比对时忽略大小写与首尾空格）" },
+              "why": { "type": "string", "minLength": 4, "description": "解析" }
+            }
           },
-          "why": { "type": "string", "minLength": 4, "description": "解析" }
-        }
+          {
+            "title": "编程题（code）",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "prompt", "test_code", "why"],
+            "properties": {
+              "kind": { "const": "code" },
+              "prompt": { "type": "string", "minLength": 8, "description": "题面：要求实现什么" },
+              "starter": { "type": "string", "description": "起始代码（函数签名/骨架），学生在此基础上补全" },
+              "test_code": { "type": "string", "minLength": 8, "description": "测试代码：注入 rustway_checker 模块（可 use super::*），与学习者代码合并后以 rustc --test 编译运行，全部通过即得分" },
+              "why": { "type": "string", "minLength": 4, "description": "解析：考察点说明" }
+            }
+          }
+        ]
       }
+    },
+    "domain": {
+      "type": "string",
+      "description": "可选。领域标签：本框架是通用学习框架，不限于计算机（如 数学 / 音乐 / 语言）。缺省视为通用。"
     },
     "detail_md": {
       "type": "string",

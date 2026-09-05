@@ -5,7 +5,7 @@
 
 ![Rust](https://img.shields.io/badge/Rust-1.94+-DEA584?logo=rust)
 ![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)
-![CI](https://github.com/powersw2024/rustway/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/powersw2024/MyRoadmapTranslation/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 
 ## 这是什么
@@ -39,7 +39,7 @@ RustWay 是一个「教程即软件」的学习系统：
 依赖：Rust 1.85+ 与 Node.js 20+。
 
 ```bash
-git clone https://github.com/powersw2024/rustway.git
+git clone https://github.com/powersw2024/MyRoadmapTranslation.git
 cd rustway
 
 # 构建前端（Vue 3 + Vite，产物在 frontend/dist）

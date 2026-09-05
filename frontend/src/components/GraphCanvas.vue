@@ -7,9 +7,6 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import { NodeBorderProgram } from '@sigma/node-border'
-import forceAtlas2 from 'graphology-layout-forceatlas2'
-import FA2Supervisor from 'graphology-layout-forceatlas2/worker'
-import circular from 'graphology-layout/circular'
 import { useManifest, useProgress, useTheme, go } from '../composables/store'
 
 const { manifest } = useManifest()
@@ -17,6 +14,7 @@ const { progress } = useProgress()
 const { theme } = useTheme()
 
 const container = ref(null)
+const wrap = ref(null) // .graph-wrap 根元素（滚轮边界放行监听用）
 const tip = ref({ show: false, x: 0, y: 0, title: '', sub: '' })
 const hiddenModules = ref(new Set())
 // 两类关系的显示开关：前置（手工声明）与相似（算法发现）
@@ -37,14 +35,34 @@ let lastFrame = performance.now()
 let slowFrames = 0
 let fastFrames = 0
 const FRAME_BUDGET = 1000 / 30 // 目标 ≥30fps
+// 自转状态：0.06 rad/s ≈ 105s 一圈；交互后暂停 6s
+let spinPausedUntil = 0
+let lastSpinT = 0
 
 function frameGuard(now) {
   const delta = now - lastFrame
   lastFrame = now
+
+  // 启动后 5s 宽限期：入场动画/着色器编译的首帧波动不计入降级
+  if (frameGuard._mount && now - frameGuard._mount < 5000) return
+  if (!frameGuard._mount) frameGuard._mount = now
+
+  // 地球式缓慢自转：绕视图中心匀速旋转；指针交互后暂停数秒
+  // ?static=1 供无 GPU/自动化截图环境禁用动画
+  const staticMode = new URLSearchParams(window.location.search).has('static')
+  if (renderer && !REDUCED_MOTION && !staticMode && now > spinPausedUntil && !dragged) {
+    const dt = lastSpinT ? Math.min((now - lastSpinT) / 1000, 0.1) : 0
+    if (dt > 0) {
+      const cam = renderer.getCamera()
+      cam.setState({ angle: cam.angle + 0.06 * dt })
+    }
+  }
+  lastSpinT = now
+
   if (delta > FRAME_BUDGET * 2) {
     slowFrames++
     fastFrames = 0
-    if (slowFrames > 20 && lodLevel.value < 2) {
+    if (slowFrames > 45 && lodLevel.value < 2) {
       lodLevel.value++
       slowFrames = 0
       renderer?.refresh()
@@ -164,105 +182,36 @@ function buildGraph() {
   for (const m of mods) {
     for (const c of m.chapters) {
       for (const k of c.kps) {
+        // 星系布局由后端计算（layout.rs）：x/y 轨道坐标直接消费，前端零布局计算
         graph.addNode(k.id, {
           label: k.title,
           moduleId: m.id,
           moduleTitle: m.title,
-          color: m.color,
           difficulty: k.difficulty,
-          size: 4 + k.difficulty * 2.4,
+          orbit: k.orbit ?? 0,
+          size: 7, // 星球尺寸统一，核心度只影响轨道层级
           enter: enterIdx++,
-          x: 0, y: 0,
+          x: k.x ?? 0,
+          y: k.y ?? 0,
         })
       }
     }
   }
   for (const [from, to] of manifest.value.edges) {
     if (graph.hasNode(from) && graph.hasNode(to) && !graph.hasEdge(from, to)) {
-      graph.addEdge(from, to, { size: 0.7, kind: 'prereq', hidden: false })
+      graph.addEdge(from, to, { size: 0.35, kind: 'prereq', hidden: false })
     }
   }
-  // 相似算法边：紫色、更细，与手工前置在视觉上明确区分
+  // 相似算法边：更细更淡，与手工前置在视觉上明确区分
   for (const [a, b, score] of manifest.value.similarEdges || []) {
     if (graph.hasNode(a) && graph.hasNode(b) && !graph.hasEdge(a, b)) {
-      graph.addEdge(a, b, { size: 0.45, kind: 'similar', score, hidden: false })
+      graph.addEdge(a, b, { size: 0.22, kind: 'similar', score, hidden: false })
     }
   }
-
-  // 初始位置：按模块扇形摆放，FA2 只需微调
-  circular.assign(graph)
-  const modIndex = Object.fromEntries(mods.map((m, i) => [m.id, i]))
-  graph.forEachNode((node, attr) => {
-    const i = modIndex[attr.moduleId] ?? 0
-    const n = mods.length
-    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
-    const r = 140 + attr.difficulty * 90
-    graph.setNodeAttribute(node, 'x', Math.cos(angle) * r * 1.6 + (Math.random() - 0.5) * 120)
-    graph.setNodeAttribute(node, 'y', Math.sin(angle) * r + (Math.random() - 0.5) * 120)
-  })
 }
 
 // ---------- 布局 ----------
-const FA2_SETTINGS = {
-  gravity: 2.2,
-  scalingRatio: 8,
-  barnesHutOptimize: true,
-  barnesHutTheta: 0.55,
-  slowDown: 12,
-  edgeWeightInfluence: 0,
-  adjustSizes: true,
-}
-const VW = 1600, VH = 880, CX = VW / 2, CY = VH / 2
-
-function runLayoutSync(iterations = 170) {
-  forceAtlas2.assign(graph, { iterations, settings: FA2_SETTINGS })
-  clampOutliers()
-  fitToView()
-}
-
-// 把飞得太远的节点截断回密度核心区（中位数 ± 4×MAD）
-function clampOutliers() {
-  for (const axis of ['x', 'y']) {
-    const vals = graph.mapNodes((_, a) => a[axis]).sort((a, b) => a - b)
-    const median = vals[Math.floor(vals.length / 2)]
-    const absDiff = vals.map(v => Math.abs(v - median)).sort((a, b) => a - b)
-    const mad = Math.max(absDiff[Math.floor(absDiff.length / 2)], 1)
-    const lo = median - 4 * mad, hi = median + 4 * mad
-    graph.forEachNode((n, a) => {
-      if (a[axis] < lo) graph.setNodeAttribute(n, axis, lo)
-      if (a[axis] > hi) graph.setNodeAttribute(n, axis, hi)
-    })
-  }
-}
-
-// 归一化：把布局缩放平移进固定视口框
-function fitToView() {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-  graph.forEachNode((_, a) => {
-    if (a.x < minX) minX = a.x
-    if (a.x > maxX) maxX = a.x
-    if (a.y < minY) minY = a.y
-    if (a.y > maxY) maxY = a.y
-  })
-  const s = Math.min(1250 / Math.max(maxX - minX, 1), 680 / Math.max(maxY - minY, 1))
-  const mx = (minX + maxX) / 2, my = (minY + maxY) / 2
-  graph.forEachNode((n, a) => {
-    graph.setNodeAttribute(n, 'x', CX + (a.x - mx) * s)
-    graph.setNodeAttribute(n, 'y', CY + (a.y - my) * s)
-  })
-}
-
-function startLayout(ms) {
-  if (!graph) return
-  stopLayout()
-  supervisor = new FA2Supervisor(graph, { settings: FA2_SETTINGS })
-  supervisor.start()
-  if (ms) layoutTimer = setTimeout(stopLayout, ms)
-}
-function stopLayout() {
-  if (layoutTimer) { clearTimeout(layoutTimer); layoutTimer = null }
-  if (supervisor) { supervisor.stop(); supervisor.kill(); supervisor = null }
-}
+// 星系布局已由后端（layout.rs）计算并随 manifest 下发；前端零布局计算。
 
 // ---------- 渲染器 ----------
 function createRenderer() {
@@ -271,10 +220,10 @@ function createRenderer() {
     minCameraRatio: 0.12,
     maxCameraRatio: 6,
     nodeProgramClasses: { bordered: NodeBorderProgram },
-    defaultNodeType: 'circle',
-    labelDensity: 0.7,
+    defaultNodeType: 'bordered',
+    labelDensity: 1.0,
     labelGridCellSize: 90,
-    labelRenderedSizeThreshold: 13,
+    labelRenderedSizeThreshold: 9,
     labelFont: "'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif",
     labelWeight: '600',
     labelSize: 12,
@@ -286,6 +235,11 @@ function createRenderer() {
 
       // 统一尺寸因子：入场弹出 × 悬停放大 × 呼吸 × 闪光
       let scale = 1
+
+      // 节点/线分离：所有节点带背景色描边（在边上"挖出"间隙），默认更大更实
+      res.type = 'bordered'
+      res.borderColor = cssVar('--bg', '#0a0e1a')
+      res.borderSize = 1.6
 
       // 入场：按序 stagger 弹出（easeOutBack 回弹）
       if (motion.appearStart > 0 && !REDUCED_MOTION) {
@@ -411,7 +365,7 @@ function createRenderer() {
     dragged = null
     lastDragEnd = Date.now()
     renderer.getCamera().enable()
-    startLayout(1500) // 松手后短暂重排
+    // 布局为后端计算的固定星系坐标，拖拽松手后不重排（保持轨道结构）
   }
   renderer.on('mouseup', release)
   renderer.on('mouseupbody', release)
@@ -461,7 +415,8 @@ onMounted(async () => {
   if (!manifest.value) await new Promise(r => watch(manifest, r, { once: true }))
   buildGraph()
   createRenderer()
-  runLayoutSync(170)
+  // 星系全景：初始视野覆盖全部轨道（外圈尘埃带半径 ~640）
+  renderer.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1.45, angle: 0 })
   renderer.refresh()
   recountVisible()
   // 入场动画：布局落定后按序弹出
@@ -470,11 +425,40 @@ onMounted(async () => {
   startMotion()
   lastFrame = performance.now()
   rafId = requestAnimationFrame(frameGuard)
+
+  // 滚轮分区：仅悬停图谱时缩放（sigma 容器天然如此）；
+  // 缩放到达边界后继续滚动 → 放行页面滚动，避免"卡"在图谱上
+  const el = wrap.value
+  el.addEventListener(
+    'wheel',
+    e => {
+      if (!renderer) return
+      const cam = renderer.getCamera()
+      const atZoomOutLimit = cam.ratio <= 0.12 * 1.1 && e.deltaY > 0
+      const atZoomInLimit = cam.ratio >= 6 * 0.95 && e.deltaY < 0
+      if (atZoomOutLimit || atZoomInLimit) {
+        // 阻止 sigma 收到事件（不 preventDefault → 浏览器滚动页面）
+        e.stopImmediatePropagation()
+      }
+    },
+    true
+  )
+  // 指针交互期间暂停自转，松手数秒后恢复
+  const pauseSpin = () => {
+    spinPausedUntil = performance.now() + 6000
+  }
+  el.addEventListener('pointerdown', pauseSpin)
+  el.addEventListener('pointerup', pauseSpin)
+  el.addEventListener('wheel', pauseSpin, { passive: true })
+  onBeforeUnmount(() => {
+    el.removeEventListener('pointerdown', pauseSpin)
+    el.removeEventListener('pointerup', pauseSpin)
+    el.removeEventListener('wheel', pauseSpin)
+  })
 })
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(rafId)
-  stopLayout()
   if (renderer) { renderer.kill(); renderer = null }
 })
 
@@ -501,11 +485,11 @@ const legend = computed(() => {
 </script>
 
 <template>
-  <div class="graph-wrap">
+  <div ref="wrap" class="graph-wrap">
     <div ref="container" class="sigma-container" />
 
     <div class="graph-legend">
-      <div class="t-caption c-faint" style="font-weight: 700">模块图例（点击隐藏）</div>
+      <div class="t-caption c-faint" style="font-weight: 700">知识面图例（点击隐藏）</div>
       <div
         v-for="m in legend"
         :key="m.id"
@@ -531,7 +515,7 @@ const legend = computed(() => {
     </div>
 
     <div class="graph-stats">
-      {{ visibleCount }} 个知识点 · {{ graph ? graph.size : 0 }} 边（{{ similarCount }} 条算法相似） · 拖动节点 / 滚轮缩放 / 双击复位
+      {{ visibleCount }} 个知识点 · {{ graph ? graph.size : 0 }} 条关联 · 拖动节点 / 滚轮缩放 / 双击复位
       <span v-if="lodLevel > 0" class="c-gold"> · 性能模式 L{{ lodLevel }}</span>
     </div>
 

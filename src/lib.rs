@@ -4,8 +4,11 @@
 //! → 加载与校验 → axum API → 前端知识图谱。
 //! 新增知识点**不需要修改任何 Rust 代码**：新建 JSON 文件、在 curriculum.json 中挂载即可。
 
+pub mod ai;
 pub mod api;
 pub mod db;
+pub mod judge;
+pub mod layout;
 pub mod similarity;
 
 use serde::{Deserialize, Serialize};
@@ -43,7 +46,17 @@ pub struct Module {
     pub icon: String,
     pub color: String,
     pub subtitle: String,
+    /// 知识入口分类（可选，缺省「通用」）：前端首页按此过滤入口卡片
+    #[serde(default = "default_category")]
+    pub category: String,
+    /// 布局扩展位：模块级自定义元数据（前端/工具按需消费，引擎不解释）
+    #[serde(default)]
+    pub extra: serde_json::Value,
     pub chapters: Vec<Chapter>,
+}
+
+fn default_category() -> String {
+    "通用".into()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -56,14 +69,43 @@ pub struct Chapter {
 }
 
 /// 一道测验题。KP 自带测验的 `kp` 字段由所属知识点推导，关卡测验必须显式标注。
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// 测验题：支持三种题型（kind 区分，缺省 choice 向后兼容）。
+/// - choice 选择题：q + opts + answer(下标) + why
+/// - blank  填空题：q 中用 __ 标空位 + accept 为可接受答案（比较前 trim + 小写）
+/// - code   编程题：prompt 题面 + starter 起始代码 + test_code 追加测试
+///   （服务端把 starter + test_code 合并后 rustc --test 编译运行，退出码 0 = 通过）
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct QuizItem {
+    #[serde(default)]
+    pub kind: String, // "" | "choice" | "blank" | "code"
+    #[serde(default)]
     pub q: String,
+    #[serde(default)]
     pub opts: Vec<String>,
+    #[serde(default)]
     pub answer: usize,
+    #[serde(default)]
+    pub accept: Vec<String>,
+    #[serde(default)]
+    pub prompt: String,
+    #[serde(default)]
+    pub starter: String,
+    #[serde(default)]
+    pub test_code: String,
+    #[serde(default)]
     pub why: String,
     #[serde(default)]
     pub kp: String,
+}
+
+impl QuizItem {
+    pub fn kind_str(&self) -> &str {
+        match self.kind.as_str() {
+            "blank" => "blank",
+            "code" => "code",
+            _ => "choice",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -86,6 +128,9 @@ pub struct Kp {
     pub detail_md: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// 领域标签（可选）：学习框架是通用的，不限于计算机；用于过滤与展示
+    #[serde(default)]
+    pub domain: String,
     /// 加载时渲染好的正文 HTML（detail_md 存在时）
     #[serde(skip)]
     pub detail_html: String,
@@ -119,6 +164,8 @@ pub struct Store {
     pub warnings: Vec<String>,
     /// 相似算法自动发现的关联边（与手工前置互补）
     pub similar_edges: Vec<similarity::SimilarEdge>,
+    /// 星系团布局（服务端计算，前端零布局成本）
+    pub galaxy: Vec<layout::GalaxyNode>,
 }
 
 impl Store {
@@ -253,7 +300,7 @@ pub fn load_store(content_dir: &Path) -> Result<Store, String> {
                         chapter.id, q.kp
                     ));
                 }
-                validate_quiz(&q.q, &q.opts, q.answer, &q.why, &chapter.id, &mut errors);
+                validate_quiz(q, &chapter.id, &mut errors);
             }
         }
     }
@@ -308,7 +355,7 @@ pub fn load_store(content_dir: &Path) -> Result<Store, String> {
             errors.push(format!("知识点 {id} 没有任何自测题（quiz 为空）"));
         }
         for q in &kp.quiz {
-            validate_quiz(&q.q, &q.opts, q.answer, &q.why, id, &mut errors);
+            validate_quiz(q, id, &mut errors);
         }
         if kp.task.trim().is_empty() {
             errors.push(format!("知识点 {id} 缺少验证任务（task 为空）"));
@@ -357,6 +404,19 @@ pub fn load_store(content_dir: &Path) -> Result<Store, String> {
         }
     }
 
+    // 星系团布局：核心度定轨道、同知识面同扇区（确定性计算）
+    let galaxy = layout::build_galaxy(&Store {
+        curriculum: curriculum.clone(),
+        kps: kps.clone(),
+        placement: placement.clone(),
+        unplaced: unplaced.clone(),
+        errors: Vec::new(),
+        warnings: Vec::new(),
+        similar_edges: similar_edges.clone(),
+        galaxy: Vec::new(),
+    })
+    .nodes;
+
     Ok(Store {
         curriculum,
         kps,
@@ -365,28 +425,47 @@ pub fn load_store(content_dir: &Path) -> Result<Store, String> {
         errors,
         warnings,
         similar_edges,
+        galaxy,
     })
 }
 
-fn validate_quiz(
-    q: &str,
-    opts: &[String],
-    answer: usize,
-    why: &str,
-    owner: &str,
-    errors: &mut Vec<String>,
-) {
-    if q.trim().is_empty() {
-        errors.push(format!("{owner} 存在空题干"));
+fn validate_quiz(q: &QuizItem, owner: &str, errors: &mut Vec<String>) {
+    if q.why.trim().is_empty() {
+        errors.push(format!("{owner} 的题目缺少解析: {}", q.q));
     }
-    if opts.len() < 2 {
-        errors.push(format!("{owner} 的题目选项不足 2 个: {q}"));
-    }
-    if answer >= opts.len() {
-        errors.push(format!("{owner} 的题目答案下标越界: {q}"));
-    }
-    if why.trim().is_empty() {
-        errors.push(format!("{owner} 的题目缺少解析: {q}"));
+    match q.kind_str() {
+        "choice" => {
+            if q.q.trim().is_empty() {
+                errors.push(format!("{owner} 存在空题干"));
+            }
+            if q.opts.len() < 2 {
+                errors.push(format!("{owner} 的题目选项不足 2 个: {}", q.q));
+            }
+            if q.answer >= q.opts.len() {
+                errors.push(format!("{owner} 的题目答案下标越界: {}", q.q));
+            }
+        }
+        "blank" => {
+            if !q.q.contains("__") {
+                errors.push(format!("{owner} 的填空题题干必须用 __ 标出空位: {}", q.q));
+            }
+            if q.accept.iter().all(|a| a.trim().is_empty()) {
+                errors.push(format!("{owner} 的填空题缺少可接受答案 (accept): {}", q.q));
+            }
+        }
+        "code" => {
+            if q.prompt.trim().is_empty() {
+                errors.push(format!("{owner} 的编程题缺少题面 (prompt)"));
+            }
+            if q.test_code.trim().is_empty() {
+                errors.push(format!(
+                    "{owner} 的编程题缺少测试代码 (test_code，将追加到用户代码后以 rustc --test 运行)"
+                ));
+            }
+        }
+        other => errors.push(format!(
+            "{owner} 的题目 kind 非法: {other}（可用 choice/blank/code）"
+        )),
     }
 }
 
@@ -480,10 +559,12 @@ mod tests {
                 answer: 0,
                 why: "因为……".into(),
                 kp: String::new(),
+                ..Default::default()
             }],
             detail_md: None,
             tags: vec![],
             detail_html: String::new(),
+            domain: String::new(),
         }
     }
 

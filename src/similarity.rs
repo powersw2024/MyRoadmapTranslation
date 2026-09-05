@@ -191,6 +191,7 @@ mod tests {
             detail_md: None,
             tags: tags.iter().map(|s| s.to_string()).collect(),
             detail_html: String::new(),
+            domain: String::new(),
         }
     }
 

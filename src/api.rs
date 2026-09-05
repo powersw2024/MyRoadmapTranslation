@@ -4,6 +4,12 @@ use crate::Store;
 use serde_json::{json, Value};
 
 impl Store {
+    /// 星系布局在加载时计算一次（见 layout.rs）。
+    pub fn with_galaxy(mut self, galaxy: crate::layout::Galaxy) -> Self {
+        self.galaxy = galaxy.nodes;
+        self
+    }
+
     /// 首页知识图谱与课程树所需的完整清单。
     pub fn manifest_json(&self) -> Value {
         let mut modules = Vec::new();
@@ -15,13 +21,16 @@ impl Store {
                     .iter()
                     .filter_map(|id| self.kps.get(id))
                     .map(|k| {
+                        let g = self.galaxy.iter().find(|n| n.id == k.id);
                         json!({
                             "id": k.id, "title": k.title,
                             "difficulty": k.difficulty, "minutes": k.minutes,
                             "summary": k.summary, "prereqs": k.prereqs,
-                            "tags": k.tags,
+                            "tags": k.tags, "domain": k.domain,
                             "moduleId": m.id, "chapterId": c.id,
                             "hasDetail": !k.detail_html.is_empty(),
+                            "x": g.map(|n| n.x), "y": g.map(|n| n.y),
+                            "orbit": g.map(|n| n.orbit), "core": g.map(|n| n.core),
                         })
                     })
                     .collect();
@@ -34,6 +43,7 @@ impl Store {
             modules.push(json!({
                 "id": m.id, "num": m.num, "title": m.title,
                 "icon": m.icon, "color": m.color, "subtitle": m.subtitle,
+                "category": m.category,
                 "chapters": chapters,
             }));
         }

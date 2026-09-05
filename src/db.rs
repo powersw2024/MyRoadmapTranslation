@@ -13,7 +13,9 @@
 
 use crate::Store;
 use rusqlite::Connection;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone)]
 pub struct DbSnapshot {
@@ -28,28 +30,143 @@ pub struct DbSnapshot {
     pub synced_at: String,
 }
 
-/// 打开主库、建表、全量同步、回读校验、生成备库，返回从主库回读的结构快照。
-pub fn open_sync_and_backup(store: &Store, data_dir: &Path) -> Result<DbSnapshot, String> {
-    std::fs::create_dir_all(data_dir).map_err(|e| format!("创建数据目录失败: {e}"))?;
-    let primary_path = data_dir.join("rustway.db");
-    let backup_path = data_dir.join("rustway-backup.db");
+/// 常驻数据库句柄：结构快照 + 主库连接（提交留存用）。
+pub struct Db {
+    pub snapshot: DbSnapshot,
+    conn: Mutex<Connection>,
+    data_dir: PathBuf,
+}
 
-    let conn = Connection::open(&primary_path)
-        .map_err(|e| format!("打开主库 {} 失败: {e}", primary_path.display()))?;
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| format!("开启 WAL 失败: {e}"))?;
-    init_schema(&conn)?;
+/// 通过评测的作品：文件落盘 + 数据库映射。
+#[derive(Debug, Clone, Serialize)]
+pub struct SubmissionMeta {
+    pub id: i64,
+    pub kp_id: String,
+    pub passed: bool,
+    pub file_path: String,
+    pub ai_score: Option<i64>,
+    pub created_at: String,
+}
 
-    sync(&conn, store)?;
+impl Db {
+    /// 打开主库、建表、全量同步、回读校验、生成备库。
+    pub fn open(store: &Store, data_dir: &Path) -> Result<Self, String> {
+        std::fs::create_dir_all(data_dir).map_err(|e| format!("创建数据目录失败: {e}"))?;
+        let primary_path = data_dir.join("rustway.db");
+        let backup_path = data_dir.join("rustway-backup.db");
 
-    // 回读校验：结构必须与内存态一致（行数逐表比对）
-    let snapshot = read_snapshot(&conn, &primary_path, &backup_path)?;
-    verify(&snapshot, store)?;
+        let conn = Connection::open(&primary_path)
+            .map_err(|e| format!("打开主库 {} 失败: {e}", primary_path.display()))?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|e| format!("开启 WAL 失败: {e}"))?;
+        init_schema(&conn)?;
 
-    // 一主一备：Backup API 整库复制（页级、原子）
-    backup_to(&conn, &backup_path)?;
+        sync(&conn, store)?;
 
-    Ok(snapshot)
+        // 回读校验：结构必须与内存态一致（行数逐表比对）
+        let snapshot = read_snapshot(&conn, &primary_path, &backup_path)?;
+        verify(&snapshot, store)?;
+
+        // 一主一备：Backup API 整库复制（页级、原子）
+        backup_to(&conn, &backup_path)?;
+
+        Ok(Self {
+            snapshot,
+            conn: Mutex::new(conn),
+            data_dir: data_dir.to_path_buf(),
+        })
+    }
+
+    /// 保存一次通过的作品：代码写入 `data/submissions/<kp>/<时间戳>.rs`，
+    /// 数据库记录「知识点 ↔ 文件 ↔ 结果」映射。
+    pub fn save_submission(
+        &self,
+        kp_id: &str,
+        code: &str,
+        judge_output: &str,
+    ) -> Result<SubmissionMeta, String> {
+        let dir = self.data_dir.join("submissions").join(kp_id);
+        std::fs::create_dir_all(&dir).map_err(|e| format!("创建作品目录失败: {e}"))?;
+        let created_at = chrono_now();
+        let file_path = dir.join(format!("{}.rs", created_at));
+        std::fs::write(&file_path, code).map_err(|e| format!("写入作品文件失败: {e}"))?;
+
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        conn.execute(
+            "INSERT INTO submission (kp_id, kind, passed, file_path, code, judge_output, created_at) \
+             VALUES (?1, 'code', 1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                kp_id,
+                file_path.display().to_string(),
+                code,
+                judge_output,
+                created_at
+            ],
+        )
+        .map_err(|e| format!("写入提交记录失败: {e}"))?;
+        let id = conn.last_insert_rowid();
+        Ok(SubmissionMeta {
+            id,
+            kp_id: kp_id.into(),
+            passed: true,
+            file_path: file_path.display().to_string(),
+            ai_score: None,
+            created_at,
+        })
+    }
+
+    /// 追加 AI 评价结果。
+    pub fn update_submission_review(
+        &self,
+        id: i64,
+        score: i64,
+        comments: &str,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        conn.execute(
+            "UPDATE submission SET ai_score = ?2, ai_comments = ?3 WHERE id = ?1",
+            rusqlite::params![id, score, comments],
+        )
+        .map_err(|e| format!("更新 AI 评价失败: {e}"))?;
+        Ok(())
+    }
+
+    /// 列出提交映射（可按知识点过滤），不含代码正文。
+    pub fn list_submissions(&self, kp_id: Option<&str>) -> Result<Vec<SubmissionMeta>, String> {
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, kp_id, passed, file_path, ai_score, created_at FROM submission \
+                 WHERE (?1 IS NULL OR kp_id = ?1) ORDER BY id DESC LIMIT 200",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params![kp_id], |r| {
+                Ok(SubmissionMeta {
+                    id: r.get(0)?,
+                    kp_id: r.get(1)?,
+                    passed: r.get::<_, i64>(2)? != 0,
+                    file_path: r.get(3)?,
+                    ai_score: r.get(4)?,
+                    created_at: r.get(5)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        Ok(rows)
+    }
+
+    /// 取某次提交的代码正文（AI 评价输入）。
+    pub fn submission_code(&self, id: i64) -> Result<(String, String), String> {
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        conn.query_row(
+            "SELECT kp_id, code FROM submission WHERE id = ?1",
+            rusqlite::params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| format!("提交不存在: {e}"))
+    }
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {
@@ -87,6 +204,19 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS submission (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            kp_id        TEXT NOT NULL,
+            kind         TEXT NOT NULL,
+            passed       INTEGER NOT NULL,
+            file_path    TEXT NOT NULL,
+            code         TEXT NOT NULL,
+            judge_output TEXT NOT NULL,
+            ai_score     INTEGER,
+            ai_comments  TEXT,
+            created_at   TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_submission_kp ON submission(kp_id);
         COMMIT;
         "#,
     )

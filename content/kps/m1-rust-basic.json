@@ -68,7 +68,15 @@
         { "t": "The Rust Book 3.3 Functions", "u": "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html" }
       ],
       "quiz": [
-        { "q": "fn f() -> i32 { 5 } 与 fn f() -> i32 { 5; } 的区别：", "opts": ["相同", "后者块尾是语句，块类型为 ()，与返回类型 i32 不符而编译错误", "后者返回 5", "后者更慢"], "answer": 1, "why": "分号把表达式变成语句丢弃值，块返回 ()，类型不匹配报错。" }
+        { "q": "fn f() -> i32 { 5 } 与 fn f() -> i32 { 5; } 的区别：", "opts": ["相同", "后者块尾是语句，块类型为 ()，与返回类型 i32 不符而编译错误", "后者返回 5", "后者更慢"], "answer": 1, "why": "分号把表达式变成语句丢弃值，块返回 ()，类型不匹配报错。" },
+        { "kind": "blank", "q": "Rust 函数体最后一个不带分号的表达式就是函数的__。", "accept": ["返回值", "返回值。"], "why": "块尾表达式即返回值；加分号会把它变成语句，块返回 ()。" },
+        {
+          "kind": "code",
+          "prompt": "实现函数 add(a: i32, b: i32) -> i32 使下方测试通过。",
+          "starter": "fn add(a: i32, b: i32) -> i32 {\n    // TODO: 返回 a + b\n    unimplemented!()\n}",
+          "test_code": "    #[test]\n    fn adds_basic() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(-1, 1), 0);\n    }",
+          "why": "考察函数签名与块尾表达式：最后一行 a + b（无分号）即返回值。"
+        }
       ],
       "detail_md": "content/rust/functions.md",
       "tags": ["语法", "函数"]

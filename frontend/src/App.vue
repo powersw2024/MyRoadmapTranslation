@@ -30,7 +30,7 @@ const totalPlaced = computed(() => {
       <span class="brand-icon">🦀</span>
       <span class="brand-text">
         <strong>RustWay</strong>
-        <small>计算机学习之路</small>
+        <small>知识学习之路</small>
       </span>
     </a>
 
@@ -74,7 +74,7 @@ const totalPlaced = computed(() => {
   </main>
 
   <footer class="footer">
-    <span>RustWay v{{ manifest?.version || '…' }} — 内容与代码分离 · 新增知识点无需改代码 · cargo test 守护内容质量</span>
+    <span>RustWay v{{ manifest?.version || '…' }} — 通用学习框架 · 内容与代码分离 · 新增知识点无需改代码</span>
     <a href="https://github.com/powersw2024/MyRoadmapTranslation" target="_blank" rel="noopener">GitHub ↗</a>
     <span class="c-faint">当前主题：{{ theme === 'dark' ? '暗色' : '亮色' }}</span>
   </footer>

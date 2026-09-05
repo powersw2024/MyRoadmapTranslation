@@ -20,7 +20,6 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Json;
 use axum::routing::get;
 use axum::Router;
-use rustway::db::DbSnapshot;
 use rustway::Store;
 use serde_json::json;
 use std::path::{Path as StdPath, PathBuf};
@@ -30,11 +29,11 @@ use tower_http::services::ServeDir;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
-/// 服务状态：内容源（内存）+ 结构映射库快照（SQLite 回读）。
+/// 服务状态：内容源（内存）+ 结构映射库（SQLite 回读快照 + 提交留存连接）。
 #[derive(Clone)]
 struct AppState {
     store: Arc<Store>,
-    db: Option<Arc<DbSnapshot>>,
+    db: Option<Arc<rustway::db::Db>>,
 }
 
 fn content_dir() -> PathBuf {
@@ -182,17 +181,18 @@ async fn serve() {
 
     // SQLite 映射库：一主一备。失败不阻塞服务（健康检查如实上报），可用性优先。
     let data_dir = PathBuf::from(std::env::var("RUSTWAY_DATA").unwrap_or_else(|_| "data".into()));
-    let db = match rustway::db::open_sync_and_backup(&store, &data_dir) {
-        Ok(snap) => {
+    let db = match rustway::db::Db::open(&store, &data_dir) {
+        Ok(db) => {
+            let s = &db.snapshot;
             println!(
                 "✓ 映射库已同步：{} 条编排 / {} 条前置 / {} 条相似 → 主库 {} + 备库 {}",
-                snap.placements.len(),
-                snap.prereq_edges.len(),
-                snap.similar_edges.len(),
-                snap.primary_path.display(),
-                snap.backup_path.display()
+                s.placements.len(),
+                s.prereq_edges.len(),
+                s.similar_edges.len(),
+                s.primary_path.display(),
+                s.backup_path.display()
             );
-            Some(Arc::new(snap))
+            Some(Arc::new(db))
         }
         Err(e) => {
             eprintln!("⚠ 映射库不可用（服务继续，健康检查将上报）: {e}");
@@ -223,6 +223,10 @@ async fn serve() {
         .route("/api/kp/{id}", get(kp_detail))
         .route("/api/health", get(health))
         .route("/api/schema", get(schema))
+        .route("/api/judge", axum::routing::post(judge))
+        .route("/api/review", axum::routing::post(review))
+        .route("/api/submissions", get(submissions))
+        .route("/api/submissions/{id}", get(submission_detail))
         .fallback_service(static_service)
         .layer(CompressionLayer::new()) // gzip/br：manifest 与 dist 资源瘦身
         .layer(TraceLayer::new_for_http()) // 请求日志 → tracing 输出
@@ -269,22 +273,157 @@ async fn kp_detail(
 
 async fn health(State(st): State<AppState>) -> Json<serde_json::Value> {
     let db = st.db.as_ref().map(|d| {
+        let s = &d.snapshot;
         json!({
             "engine": "sqlite",
             "mode": "primary+backup",
-            "primary": d.primary_path.display().to_string(),
-            "backup": d.backup_path.display().to_string(),
-            "syncedAt": d.synced_at,
-            "placements": d.placements.len(),
-            "prereqEdges": d.prereq_edges.len(),
-            "similarEdges": d.similar_edges.len(),
+            "primary": s.primary_path.display().to_string(),
+            "backup": s.backup_path.display().to_string(),
+            "syncedAt": s.synced_at,
+            "placements": s.placements.len(),
+            "prereqEdges": s.prereq_edges.len(),
+            "similarEdges": s.similar_edges.len(),
+        })
+    });
+    let ai = rustway::ai::AiConfig::from_env().map(|c| {
+        json!({
+            "enabled": true,
+            "backend": c.backend,
+            "model": c.model,
         })
     });
     Json(json!({
         "status": "ok",
         "version": env!("CARGO_PKG_VERSION"),
         "db": db,
+        "ai": ai.unwrap_or_else(|| json!({"enabled": false})),
     }))
+}
+
+// ---------------- 编程题评测 / AI 评价 / 提交留存 ----------------
+
+#[derive(serde::Deserialize)]
+struct JudgeReq {
+    kp_id: String,
+    code: String,
+}
+
+/// 运行编程题评测：rustc --test 沙箱编译运行；通过则落盘 + 入库。
+async fn judge(
+    State(st): State<AppState>,
+    Json(req): Json<JudgeReq>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let kp = st.store.kps.get(&req.kp_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "kp_not_found", "id": req.kp_id })),
+        )
+    })?;
+    let test_code = kp
+        .quiz
+        .iter()
+        .find(|q| q.kind_str() == "code")
+        .map(|q| q.test_code.clone())
+        .unwrap_or_default();
+
+    let outcome = rustway::judge::run_rust_checks(&req.code, &test_code)
+        .await
+        .map_err(internal_error)?;
+
+    let mut submission_id = None;
+    if outcome.passed {
+        if let Some(db) = &st.db {
+            if let Ok(meta) = db.save_submission(&req.kp_id, &req.code, &outcome.output) {
+                submission_id = Some(meta.id);
+            }
+        }
+    }
+    Ok(Json(json!({
+        "passed": outcome.passed,
+        "output": outcome.output,
+        "durationMs": outcome.duration_ms,
+        "submissionId": submission_id,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+struct ReviewReq {
+    submission_id: i64,
+}
+
+/// AI 评价：从数据库取提交代码，调用 Ollama/OpenAI 兼容后端，结果回写数据库。
+async fn review(
+    State(st): State<AppState>,
+    Json(req): Json<ReviewReq>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let Some(db) = &st.db else {
+        return Err(bad_request("数据库不可用，无法评价"));
+    };
+    let ai = rustway::ai::AiConfig::from_env().ok_or_else(|| {
+        bad_request("AI 评价未启用：请设置 RUSTWAY_AI_BACKEND（ollama | openai）等环境变量")
+    })?;
+    let (kp_id, code) = db.submission_code(req.submission_id).map_err(bad_request)?;
+    let (title, task) = st
+        .store
+        .kps
+        .get(&kp_id)
+        .map(|k| (k.title.clone(), k.task.clone()))
+        .unwrap_or_default();
+    let r = rustway::ai::review(&ai, &title, &task, &code)
+        .await
+        .map_err(bad_request)?;
+    db.update_submission_review(
+        req.submission_id,
+        r.score as i64,
+        &format!("{}\n---\n{}", r.summary, r.suggestions.join("\n")),
+    )
+    .map_err(bad_request)?;
+    Ok(Json(json!({
+        "submissionId": req.submission_id,
+        "score": r.score,
+        "summary": r.summary,
+        "suggestions": r.suggestions,
+    })))
+}
+
+/// 提交映射列表（?kp_id= 过滤，可选）。
+async fn submissions(
+    State(st): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let Some(db) = &st.db else {
+        return Err(bad_request("数据库不可用"));
+    };
+    let rows = db
+        .list_submissions(q.get("kp_id").map(|s| s.as_str()))
+        .map_err(bad_request)?;
+    Ok(Json(json!({ "submissions": rows })))
+}
+
+/// 单条提交详情（含代码正文）。
+async fn submission_detail(
+    State(st): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let Some(db) = &st.db else {
+        return Err(bad_request("数据库不可用"));
+    };
+    let (kp_id, code) = db.submission_code(id).map_err(bad_request)?;
+    Ok(Json(json!({ "id": id, "kpId": kp_id, "code": code })))
+}
+
+fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": "bad_request", "message": msg.into() })),
+    )
+}
+
+fn internal_error(msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "error": "internal", "message": msg.into() })),
+    )
 }
 
 /// 知识点加载规范（对外发布）：贡献者按此结构编写 JSON 提交。

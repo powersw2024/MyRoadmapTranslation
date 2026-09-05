@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useManifest, useProgress, useDelayedFlag, go } from '../composables/store'
 import GraphCanvas from '../components/GraphCanvas.vue'
 import CountUp from '../components/CountUp.vue'
@@ -34,6 +34,19 @@ const stats = computed(() => {
     { icon: '📝', label: '测验题', value: s.quiz },
     { icon: '⏱️', label: '预计学习时长', value: Math.round(s.minutes / 60), suffix: 'h+' },
   ]
+})
+
+// 知识入口分类（来自 curriculum.json 的 module.category，可任意扩展）
+const activeCategory = ref('全部')
+const categories = computed(() => {
+  const set = new Set((manifest.value?.modules || []).map(m => m.category || '通用'))
+  return ['全部', ...set]
+})
+const filteredModules = computed(() => {
+  if (!manifest.value) return []
+  return manifest.value.modules.filter(
+    m => activeCategory.value === '全部' || (m.category || '通用') === activeCategory.value
+  )
 })
 </script>
 
@@ -82,11 +95,22 @@ const stats = computed(() => {
       </div>
     </div>
 
-    <!-- 模块卡片 -->
-    <div class="section-title stagger" style="animation-delay: 240ms; margin-top: 28px">📚 学习模块</div>
+    <!-- 知识入口（按分类过滤） -->
+    <div class="section-title stagger" style="animation-delay: 240ms; margin-top: 28px">📚 知识入口</div>
+    <div class="category-tabs stagger" style="animation-delay: 260ms">
+      <span
+        v-for="cat in categories"
+        :key="cat"
+        class="chip cat-tab"
+        :class="{ active: activeCategory === cat }"
+        @click="activeCategory = cat"
+      >
+        {{ cat }}
+      </span>
+    </div>
     <div class="module-grid">
       <div
-        v-for="(m, i) in manifest.modules"
+        v-for="(m, i) in filteredModules"
         :key="m.id"
         class="card card-hover module-card stagger"
         :style="{ animationDelay: 260 + i * 50 + 'ms' }"
