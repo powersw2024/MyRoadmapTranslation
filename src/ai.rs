@@ -6,8 +6,10 @@
 //! - `RUSTWAY_AI_MODEL`：模型名，ollama 默认 `qwen2.5-coder:7b`
 //! - `RUSTWAY_AI_API_KEY`：openai 兼容后端的 Bearer 密钥（仅从环境变量读取）
 //!
-//! 安全约定：请求 URL 只由服务端环境变量决定，**绝不接受请求体传入的地址**；
-//! scheme 仅允许 http/https。本地 Ollama 依赖环回地址，属部署者显式选择。
+//! 安全约定：请求 URL 只由服务端环境变量/设置页决定，**绝不接受请求体传入的地址**；
+//! scheme 仅允许 http/https。所有出站请求经 `guarded_client` 构造：
+//! DNS 解析结果全量审查后钉进客户端（防 DNS 重绑定），并禁用重定向（防 302 绕过）。
+//! 本地 Ollama 依赖环回地址，属部署者显式选择。
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -28,16 +30,6 @@ pub struct AiReview {
 }
 
 impl AiConfig {
-    /// 服务端设置页指定的配置（优先于环境变量）。
-    pub fn custom(backend: &str, base_url: &str, model: &str, api_key: Option<String>) -> Self {
-        Self {
-            backend: backend.into(),
-            base_url: base_url.trim_end_matches('/').to_string(),
-            model: model.into(),
-            api_key,
-        }
-    }
-
     /// 读取环境变量；未配置 `RUSTWAY_AI_BACKEND` 时返回 None（AI 评价关闭）。
     pub fn from_env() -> Option<Self> {
         let backend = std::env::var("RUSTWAY_AI_BACKEND").ok()?;
@@ -147,10 +139,10 @@ pub async fn review(
     code: &str,
 ) -> Result<AiReview, String> {
     let prompt = build_prompt(kp_title, task, code);
-    let client = reqwest_timeout();
+    let client = guarded_client(&cfg.base_url, Duration::from_secs(60)).await?;
     let text = match cfg.backend.as_str() {
         "ollama" => {
-            let url = format!("{}/api/chat", cfg.base_url);
+            let url = endpoint(&cfg.base_url, "api/chat")?;
             let body = json_body_ollama(&cfg.model, &prompt);
             let resp: OllamaResp = client
                 .post(url)
@@ -166,7 +158,7 @@ pub async fn review(
             resp.message.content
         }
         _ => {
-            let url = format!("{}/chat/completions", cfg.base_url);
+            let url = endpoint(&cfg.base_url, "chat/completions")?;
             let mut req = client
                 .post(url)
                 .json(&json_body_openai(&cfg.model, &prompt));
@@ -206,11 +198,11 @@ pub async fn grade_answer(
          {{\"score\": 0-100 整数（≥60 为通过）, \"summary\": \"一句话评语\", \
          \"suggestions\": [\"遗漏或需补充的要点\", ...]}}"
     );
-    let client = reqwest_timeout();
+    let client = guarded_client(&cfg.base_url, Duration::from_secs(60)).await?;
     let text = match cfg.backend.as_str() {
         "ollama" => {
             let resp: OllamaResp = client
-                .post(format!("{}/api/chat", cfg.base_url))
+                .post(endpoint(&cfg.base_url, "api/chat")?)
                 .json(&serde_json::json!({
                     "model": cfg.model,
                     "stream": false,
@@ -232,7 +224,7 @@ pub async fn grade_answer(
         }
         _ => {
             let mut req = client
-                .post(format!("{}/chat/completions", cfg.base_url))
+                .post(endpoint(&cfg.base_url, "chat/completions")?)
                 .json(&serde_json::json!({
                     "model": cfg.model,
                     "response_format": {"type": "json_object"},
@@ -312,17 +304,120 @@ pub fn validate_base_url(url: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// 连接测试：发送一次最小补全请求，返回耗时（毫秒）。20s 超时。
-pub async fn test_connection(cfg: &AiConfig) -> Result<u128, String> {
-    validate_base_url(&cfg.base_url)?;
-    let started = std::time::Instant::now();
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
+/// 从 URL 提取 host（去端口、去 IPv6 括号）。
+fn extract_host(url: &str) -> &str {
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let host_port = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    match host_port.rsplit_once(':') {
+        Some((h, port)) if !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) => h,
+        _ => host_port,
+    }
+    .trim_matches(['[', ']'])
+}
+
+/// SSRF 防护（DNS 级）：scheme 白名单 + IP 字面量黑名单 + 域名解析结果全量校验。
+/// 环回地址明确允许——本地 Ollama 是产品需求（域名必须字面量为 localhost/127.x 才放行环回）。
+/// 返回通过审查的解析地址，调用方必须把它们钉进 HTTP 客户端（`guarded_client`），
+/// 保证「校验的 IP」就是「实际连接的 IP」，杜绝 DNS 重绑定（TOCTOU）。
+async fn ssrf_vetted_addrs(base_url: &str) -> Result<Vec<std::net::SocketAddr>, String> {
+    validate_base_url(base_url)?;
+    let host = extract_host(base_url);
+    let literal_loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false);
+    let addrs = tokio::net::lookup_host((host, 80u16))
+        .await
+        .map_err(|e| format!("域名解析失败（{host}）: {e}"))?;
+    let mut vetted = Vec::new();
+    for a in addrs {
+        let ip = a.ip();
+        if ip.is_loopback() && literal_loopback {
+            vetted.push(a);
+            continue;
+        }
+        let blocked = match ip {
+            std::net::IpAddr::V4(v4) => {
+                v4.is_private()
+                    || v4.is_link_local()
+                    || v4.is_loopback()
+                    || v4.is_unspecified()
+                    || v4.is_broadcast()
+                    || v4.is_documentation()
+            }
+            std::net::IpAddr::V6(v6) => {
+                v6.is_loopback() || v6.is_unspecified() || (v6.segments()[0] & 0xfe00) == 0xfc00
+            }
+        };
+        if blocked {
+            return Err(format!(
+                "安全拦截：{host} 解析到私有/保留地址 {ip}，已阻止请求"
+            ));
+        }
+        vetted.push(a);
+    }
+    if vetted.is_empty() {
+        return Err(format!("域名解析失败（{host}）：无可用地址"));
+    }
+    Ok(vetted)
+}
+
+/// URL 端口：显式端口优先，否则按 scheme 默认（http=80 / https=443）。
+fn url_port(base_url: &str) -> u16 {
+    let rest = base_url.split_once("://").map(|(_, r)| r).unwrap_or(base_url);
+    let host_port = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    match host_port.rsplit_once(':') {
+        Some((_, port)) if !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) => {
+            port.parse().unwrap_or(80)
+        }
+        _ if base_url.starts_with("https://") => 443,
+        _ => 80,
+    }
+}
+
+/// 构造经过 SSRF 审查的 HTTP 客户端：
+/// 1. 校验 URL 与全部 DNS 解析结果（`ssrf_vetted_addrs`）；
+/// 2. 把审查通过的 IP 直接钉进客户端（`resolve`），实际连接不再二次解析域名；
+/// 3. 禁用重定向——302 跳转不允许把请求带到未审查的地址。
+async fn guarded_client(base_url: &str, timeout: Duration) -> Result<reqwest::Client, String> {
+    validate_base_url(base_url)?;
+    let vetted = ssrf_vetted_addrs(base_url).await?;
+    let host = extract_host(base_url).to_string();
+    let port = url_port(base_url);
+    let mut builder = reqwest::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none());
+    for addr in vetted {
+        builder = builder.resolve(&host, std::net::SocketAddr::new(addr.ip(), port));
+    }
+    builder
         .build()
-        .expect("构建 HTTP 客户端");
+        .map_err(|e| format!("构建 HTTP 客户端失败: {e}"))
+}
+
+/// 构造 API 端点：`Url::parse` + `join`，请求目标永远是解析过的 `Url` 类型，
+/// 不做字符串拼接（base_url 是否含 `/v1` 等路径段均语义正确）。
+fn endpoint(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
+    let mut base =
+        reqwest::Url::parse(base_url).map_err(|e| format!("base_url 非法: {e}"))?;
+    let trimmed = base.path().trim_end_matches('/').to_string();
+    base.set_path(&if trimmed.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{trimmed}/")
+    });
+    base.join(path).map_err(|e| format!("接口路径非法: {e}"))
+}
+
+/// 后端探针：发送一次最小补全请求，返回耗时（毫秒）。20s 超时。
+/// 配置只来自服务端环境变量（`AiConfig::from_env`），地址不可被请求注入。
+pub async fn probe_backend(cfg: &AiConfig) -> Result<u128, String> {
+    let client = guarded_client(&cfg.base_url, Duration::from_secs(20)).await?;
+    let started = std::time::Instant::now();
     match cfg.backend.as_str() {
         "ollama" => {
-            let url = format!("{}/api/chat", cfg.base_url);
+            let url = endpoint(&cfg.base_url, "api/chat")?;
             let body = serde_json::json!({
                 "model": cfg.model,
                 "stream": false,
@@ -342,7 +437,7 @@ pub async fn test_connection(cfg: &AiConfig) -> Result<u128, String> {
             let _ = resp.message.content;
         }
         _ => {
-            let url = format!("{}/chat/completions", cfg.base_url);
+            let url = endpoint(&cfg.base_url, "chat/completions")?;
             let mut req = client.post(url).json(&serde_json::json!({
                 "model": cfg.model,
                 "max_tokens": 5,
@@ -364,13 +459,6 @@ pub async fn test_connection(cfg: &AiConfig) -> Result<u128, String> {
         }
     }
     Ok(started.elapsed().as_millis())
-}
-
-fn reqwest_timeout() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(60))
-        .build()
-        .expect("构建 HTTP 客户端")
 }
 
 fn json_body_ollama(model: &str, prompt: &str) -> serde_json::Value {
@@ -422,6 +510,14 @@ mod tests {
         if cfg.is_none() {
             assert!(std::env::var("RUSTWAY_AI_BACKEND").is_err());
         }
+    }
+
+    #[test]
+    fn url_port_defaults_by_scheme() {
+        assert_eq!(url_port("http://example.com"), 80);
+        assert_eq!(url_port("https://example.com"), 443);
+        assert_eq!(url_port("http://127.0.0.1:11434"), 11434);
+        assert_eq!(url_port("https://api.x.ai:8443/v1"), 8443);
     }
 
     #[test]

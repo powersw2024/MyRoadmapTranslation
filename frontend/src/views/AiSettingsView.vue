@@ -1,21 +1,19 @@
 <script setup>
 /**
- * AI 设置页：配置评价后端（本地 Ollama / OpenAI 兼容 API），
- * 保存到服务端 SQLite；「测试连接」用当前生效配置发起一次最小补全。
- * 密钥只提交、不回传（页面只显示"已配置"状态）。
+ * AI 状态页：展示服务端环境变量配置的评价后端（只读），
+ * 「测试连接」用当前生效配置发起一次最小补全。
+ * 安全契约：后端地址只由服务端环境变量决定，页面不接受/不传任何 URL。
  */
 import { ref, onMounted } from 'vue'
 
-const backend = ref('ollama')
+const backend = ref('')
 const baseUrl = ref('')
 const model = ref('')
-const apiKey = ref('')
 const apiKeySet = ref(false)
 const source = ref('none')
 
 const loading = ref(true)
-const saving = ref(false)
-const saveMsg = ref('')
+const loadMsg = ref('')
 const testing = ref(false)
 const testResult = ref(null) // { ok, latencyMs? , error? }
 
@@ -24,49 +22,23 @@ async function load() {
   try {
     const res = await fetch('/api/ai/config')
     const d = await res.json()
-    backend.value = d.backend || 'ollama'
+    backend.value = d.backend || ''
     baseUrl.value = d.baseUrl || ''
     model.value = d.model || ''
     apiKeySet.value = !!d.apiKeySet
     source.value = d.source || 'none'
   } catch (e) {
-    saveMsg.value = String(e.message || e)
+    loadMsg.value = String(e.message || e)
   }
   loading.value = false
 }
 onMounted(load)
 
-async function save() {
-  saving.value = true
-  saveMsg.value = ''
-  try {
-    const res = await fetch('/api/ai/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        backend: backend.value,
-        base_url: baseUrl.value,
-        model: model.value,
-        api_key: apiKey.value || null,
-        clear_api_key: apiKey.value === '__CLEAR__',
-      }),
-    })
-    const d = await res.json()
-    if (!res.ok) throw new Error(d.message || `HTTP ${res.status}`)
-    saveMsg.value = '✓ 已保存'
-    apiKey.value = ''
-    await load()
-  } catch (e) {
-    saveMsg.value = `✗ ${e.message || e}`
-  }
-  saving.value = false
-}
-
 async function testConnection() {
   testing.value = true
   testResult.value = null
   try {
-    const res = await fetch('/api/ai/test', { method: 'POST' })
+    const res = await fetch('/api/ai/probe', { method: 'POST' })
     testResult.value = await res.json()
   } catch (e) {
     testResult.value = { ok: false, error: String(e.message || e) }
@@ -78,71 +50,35 @@ async function testConnection() {
 <template>
   <div>
     <div class="breadcrumb stagger">
-      <a href="#/">首页</a><span class="sep">/</span><span>AI 设置</span>
+      <a href="#/">首页</a><span class="sep">/</span><span>AI 评价</span>
     </div>
 
     <div class="card page-head pad-lg stagger">
       <div class="meta-row">
-        <span class="chip">⚙️ 服务端设置</span>
-        <span class="chip">{{ source === 'database' ? '来源：设置页' : source === 'environment' ? '来源：环境变量' : '未配置' }}</span>
+        <span class="chip">{{ source === 'environment' ? '来源：环境变量' : '未配置' }}</span>
         <span v-if="apiKeySet" class="chip c-ok">密钥已配置</span>
       </div>
-      <h1 class="t-page">🤖 AI 设置</h1>
+      <h1 class="t-page">🤖 AI 代码评价</h1>
       <p class="summary t-body c-muted">
-        配置编程题的 AI 代码评价后端。支持本地 Ollama 与 OpenAI 兼容 API；
-        也可以完全不配置，编程题仍可运行测试判分。配置保存在本地数据库（data/rustway.db），
-        密钥永不明文回传。
+        为编程题提供 AI 代码评价。后端通过服务端环境变量配置（RUSTWAY_AI_BACKEND /
+        RUSTWAY_AI_BASE_URL / RUSTWAY_AI_MODEL / RUSTWAY_AI_API_KEY），
+        页面只读展示，不接受任何地址输入。不配置也不影响编程题的测试判分。
       </p>
     </div>
 
     <div class="card info-card pad-lg stagger" style="animation-delay: 60ms; max-width: 720px">
       <div v-if="loading" class="loading">加载配置…</div>
       <template v-else>
-        <div class="form-row">
-          <label>评价后端</label>
-          <select v-model="backend" class="form-input">
-            <option value="ollama">本地 Ollama</option>
-            <option value="openai">OpenAI 兼容 API</option>
-          </select>
-          <p class="form-hint">ollama 默认地址 http://127.0.0.1:11434，无需密钥。</p>
-        </div>
-
-        <div class="form-row">
-          <label>接口地址（Base URL）</label>
-          <input
-            v-model="baseUrl"
-            class="form-input"
-            :placeholder="backend === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'"
-          />
-          <p class="form-hint">仅支持 http(s) 地址；留空使用所选后端的默认值。</p>
-        </div>
-
-        <div class="form-row">
-          <label>模型名称</label>
-          <input
-            v-model="model"
-            class="form-input"
-            :placeholder="backend === 'ollama' ? 'qwen2.5-coder:7b' : 'gpt-4o-mini'"
-          />
-        </div>
-
-        <div class="form-row">
-          <label>API 密钥{{ apiKeySet ? '（已配置）' : '（可选）' }}</label>
-          <input
-            v-model="apiKey"
-            type="password"
-            class="form-input"
-            :placeholder="apiKeySet ? '已配置——留空表示不修改；输入 __CLEAR__ 可清除' : 'sk-…'"
-          />
-          <p class="form-hint">密钥保存在本地数据库，不会回传到页面或写入日志。openai 后端建议配置。</p>
-        </div>
+        <div class="cfg-row"><span class="cfg-label">后端</span><b>{{ backend || '—' }}</b></div>
+        <div class="cfg-row"><span class="cfg-label">接口地址</span><code>{{ baseUrl || '—' }}</code></div>
+        <div class="cfg-row"><span class="cfg-label">模型</span><b>{{ model || '—' }}</b></div>
+        <div class="cfg-row"><span class="cfg-label">密钥</span><b>{{ apiKeySet ? '已配置' : '未配置' }}</b></div>
+        <p v-if="loadMsg" class="t-note c-bad">{{ loadMsg }}</p>
 
         <div class="form-actions">
-          <button class="btn" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存配置' }}</button>
-          <button class="btn btn-solid" :disabled="testing" @click="testConnection">
+          <button class="btn btn-solid" :disabled="testing || source === 'none'" @click="testConnection">
             {{ testing ? '⏳ 测试中…' : '🔎 测试连接' }}
           </button>
-          <span v-if="saveMsg" class="t-note" :class="saveMsg.startsWith('✓') ? 'c-ok' : 'c-bad'">{{ saveMsg }}</span>
         </div>
 
         <div v-if="testResult" class="test-result" :class="testResult.ok ? 'ok' : 'bad'">
@@ -153,7 +89,7 @@ async function testConnection() {
             <b>✗ 连接失败</b> —— {{ testResult.error }}
             <p class="form-hint" style="margin-top: 6px">
               排查：本地 Ollama 是否已启动（ollama serve）？模型是否已拉取（ollama pull &lt;模型名&gt;）？
-              地址是否可访问？
+              环境变量是否正确设置？
             </p>
           </template>
         </div>
@@ -163,21 +99,12 @@ async function testConnection() {
 </template>
 
 <style scoped>
-.form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
-.form-row label { font-size: 13px; font-weight: 600; color: var(--text); }
-.form-input {
-  height: 40px; padding: 0 14px;
-  border-radius: 10px; border: 1px solid var(--border);
-  background: var(--panel-soft); color: var(--text);
-  font-size: 13.5px; outline: none;
-  transition: border-color 0.25s, box-shadow 0.25s;
-  font-family: inherit;
-  width: 100%; box-sizing: border-box;
-}
-.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15); }
-select.form-input { appearance: auto; }
+.cfg-row { display: flex; align-items: baseline; gap: 14px; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+.cfg-row:last-of-type { border-bottom: none; }
+.cfg-label { width: 72px; flex: none; font-size: 12.5px; color: var(--faint); }
+.cfg-row code { font-size: 13px; color: var(--text); word-break: break-all; }
 .form-hint { font-size: 12px; color: var(--faint); line-height: 1.6; margin: 0; }
-.form-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
+.form-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 .test-result {
   margin-top: 18px; padding: 14px 18px; border-radius: 12px;
   font-size: 13.5px; line-height: 1.7;

@@ -175,46 +175,6 @@ impl Db {
         .map_err(|e| format!("提交不存在: {e}"))
     }
 
-    // ---------------- AI 配置（前端设置页持久化；环境变量作为缺省回退） ----------------
-
-    /// 读取完整 AI 配置（含密钥，仅供服务端内部调用；HTTP 响应必须掩码）。
-    pub fn get_ai_config_full(&self) -> Option<(String, String, String, Option<String>)> {
-        let conn = self.conn.lock().ok()?;
-        conn.query_row(
-            "SELECT backend, base_url, model, api_key FROM ai_config WHERE id = 1",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .ok()
-    }
-
-    /// 保存 AI 配置；api_key 传 None 表示保留原值。
-    pub fn save_ai_config(
-        &self,
-        backend: &str,
-        base_url: &str,
-        model: &str,
-        api_key: Option<&str>,
-    ) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
-        match api_key {
-            Some(key) => conn
-                .execute(
-                    "INSERT INTO ai_config (id, backend, base_url, model, api_key) VALUES (1, ?1, ?2, ?3, ?4) \
-                     ON CONFLICT(id) DO UPDATE SET backend = ?1, base_url = ?2, model = ?3, api_key = ?4",
-                    rusqlite::params![backend, base_url, model, key],
-                )
-                .map(|_| ()),
-            None => conn
-                .execute(
-                    "INSERT INTO ai_config (id, backend, base_url, model, api_key) VALUES (1, ?1, ?2, ?3, NULL) \
-                     ON CONFLICT(id) DO UPDATE SET backend = ?1, base_url = ?2, model = ?3",
-                    rusqlite::params![backend, base_url, model],
-                )
-                .map(|_| ()),
-        }
-        .map_err(|e| format!("保存 AI 配置失败: {e}"))
-    }
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {

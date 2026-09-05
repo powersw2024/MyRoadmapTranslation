@@ -72,29 +72,6 @@ const filteredModules = computed(() => {
     <!-- 知识图谱（主角） -->
     <GraphCanvas />
 
-    <!-- 方法论 + 待编排 -->
-    <div class="home-grid">
-      <div class="card info-card pad stagger" style="animation-delay: 120ms">
-        <div class="section-title">🧪 科学学习方法（本教程的编排原则）</div>
-        <p class="intro-text t-desc c-muted">{{ manifest.methodology.intro }}</p>
-        <ul>
-          <li v-for="(r, i) in manifest.methodology.rules" :key="i">{{ r }}</li>
-        </ul>
-      </div>
-      <div class="card info-card pad stagger" style="animation-delay: 180ms">
-        <div class="section-title">📥 待编排知识点（{{ manifest.unplaced.length }}）</div>
-        <p class="intro-text t-desc c-muted">
-          这些知识点已通过内容校验，但尚未挂入任何章节——这正是「任意插入」能力的体现：新建 JSON 文件即可入库，随时编入任意章节。
-        </p>
-        <div class="unplaced-list" v-if="manifest.unplaced.length">
-          <span v-for="k in manifest.unplaced" :key="k.id" class="chip" @click="go('/kp/' + k.id)">
-            {{ k.title }} · {{ k.minutes }}min
-          </span>
-        </div>
-        <p v-else class="empty-tip">全部知识点都已编入学习路径。</p>
-      </div>
-    </div>
-
     <!-- 知识入口（按分类过滤） -->
     <div class="section-title stagger" style="animation-delay: 240ms; margin-top: 28px">📚 知识入口</div>
     <div class="category-tabs stagger" style="animation-delay: 260ms">

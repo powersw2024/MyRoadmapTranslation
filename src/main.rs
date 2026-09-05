@@ -228,8 +228,8 @@ async fn serve() {
         .route("/api/review", axum::routing::post(review))
         .route("/api/submissions", get(submissions))
         .route("/api/submissions/{id}", get(submission_detail))
-        .route("/api/ai/config", get(ai_get_config).post(ai_save_config))
-        .route("/api/ai/test", axum::routing::post(ai_test))
+        .route("/api/ai/config", get(ai_get_config))
+        .route("/api/ai/probe", axum::routing::post(ai_probe))
         .fallback_service(static_service)
         .layer(CompressionLayer::new()) // gzip/br：manifest 与 dist 资源瘦身
         .layer(TraceLayer::new_for_http()) // 请求日志 → tracing 输出
@@ -535,14 +535,8 @@ fn internal_error(msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value
 // ---------------- AI 配置页接口（设置持久化到 SQLite；环境变量作为缺省回退） ----------------
 
 /// 生效的 AI 配置：设置页保存的 DB 配置优先，其次环境变量。
-fn effective_ai(st: &AppState) -> Option<rustway::ai::AiConfig> {
-    if let Some(db) = &st.db {
-        if let Some((backend, base_url, model, api_key)) = db.get_ai_config_full() {
-            return Some(rustway::ai::AiConfig::custom(
-                &backend, &base_url, &model, api_key,
-            ));
-        }
-    }
+fn effective_ai(_st: &AppState) -> Option<rustway::ai::AiConfig> {
+    // 安全契约：AI 后端只来自服务端环境变量，绝不接受请求体传入的地址（SSRF 面）。
     rustway::ai::AiConfig::from_env()
 }
 
@@ -555,92 +549,27 @@ async fn ai_get_config(State(st): State<AppState>) -> Json<serde_json::Value> {
         "apiKeySet": false,
         "source": "none",
     });
-    if let Some(db) = &st.db {
-        if let Some((backend, base_url, model, key)) = db.get_ai_config_full() {
-            out["backend"] = json!(backend);
-            out["baseUrl"] = json!(base_url);
-            out["model"] = json!(model);
-            out["apiKeySet"] = json!(key.as_deref().map(|k| !k.is_empty()).unwrap_or(false));
-            out["source"] = json!("database");
-        }
+    if let Some(c) = rustway::ai::AiConfig::from_env() {
+        out["backend"] = json!(c.backend);
+        out["baseUrl"] = json!(c.base_url);
+        out["model"] = json!(c.model);
+        out["apiKeySet"] = json!(c.api_key.is_some());
+        out["source"] = json!("environment");
     }
-    if out["source"] == json!("none") {
-        if let Some(c) = rustway::ai::AiConfig::from_env() {
-            out["backend"] = json!(c.backend);
-            out["baseUrl"] = json!(c.base_url);
-            out["model"] = json!(c.model);
-            out["apiKeySet"] = json!(c.api_key.is_some());
-            out["source"] = json!("environment");
-        }
-    }
+    let _ = st;
     Json(out)
 }
 
-#[derive(serde::Deserialize)]
-struct AiSaveReq {
-    backend: String,
-    #[serde(default)]
-    base_url: String,
-    #[serde(default)]
-    model: String,
-    #[serde(default)]
-    api_key: Option<String>,
-    #[serde(default)]
-    clear_api_key: bool,
-}
-
-/// 保存 AI 配置到 SQLite。密钥仅入库，不回传、不写日志。
-async fn ai_save_config(
-    State(st): State<AppState>,
-    Json(req): Json<AiSaveReq>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    let backend = req.backend.to_lowercase();
-    if !matches!(backend.as_str(), "ollama" | "openai") {
-        return Err(bad_request("backend 仅支持 ollama | openai"));
-    }
-    let base_url = if req.base_url.trim().is_empty() {
-        match backend.as_str() {
-            "ollama" => "http://127.0.0.1:11434".into(),
-            _ => return Err(bad_request("openai 后端必须提供 base_url")),
-        }
-    } else {
-        req.base_url.trim().to_string()
-    };
-    if let Err(e) = rustway::ai::validate_base_url(&base_url) {
-        return Err(bad_request(e));
-    }
-    let model = if req.model.trim().is_empty() {
-        match backend.as_str() {
-            "ollama" => "qwen2.5-coder:7b".into(),
-            _ => return Err(bad_request("openai 后端必须提供 model")),
-        }
-    } else {
-        req.model.trim().to_string()
-    };
-    let Some(db) = &st.db else {
-        return Err(bad_request("数据库不可用，无法保存配置"));
-    };
-    let key = if req.clear_api_key {
-        Some(String::new())
-    } else {
-        req.api_key.filter(|k| !k.trim().is_empty())
-    };
-    db.save_ai_config(&backend, &base_url, &model, key.as_deref())
-        .map_err(bad_request)?;
-    Ok(Json(json!({
-        "saved": true,
-        "apiKeySet": key.as_deref().map(|k| !k.is_empty()).unwrap_or(false)
-    })))
-}
-
-/// 接入测试：用当前生效配置发起一次最小补全，返回耗时。
-async fn ai_test(
+/// 后端探针：用当前生效（环境变量）配置发起一次最小补全，返回耗时。
+async fn ai_probe(
     State(st): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let Some(cfg) = effective_ai(&st) else {
-        return Err(bad_request("AI 尚未配置：请先选择后端并保存"));
+        return Err(bad_request(
+            "AI 尚未配置：请通过环境变量 RUSTWAY_AI_BACKEND 等设置",
+        ));
     };
-    match rustway::ai::test_connection(&cfg).await {
+    match rustway::ai::probe_backend(&cfg).await {
         Ok(ms) => Ok(Json(json!({
             "ok": true,
             "latencyMs": ms,

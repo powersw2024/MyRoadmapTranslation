@@ -47,7 +47,7 @@ const totalPlaced = computed(() => {
       </div>
     </div>
 
-    <a class="icon-link" href="#/ai" title="AI 设置" @click.prevent="go('/ai')">⚙️</a>
+    <a class="icon-link" href="#/ai" title="AI 代码评价" @click.prevent="go('/ai')">⚙️</a>
 
     <ThemeToggle />
   </header>
