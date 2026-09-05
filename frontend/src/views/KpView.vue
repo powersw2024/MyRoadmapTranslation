@@ -82,7 +82,7 @@ function stars(d) {
       <div>
         <div class="card page-head pad-lg stagger">
           <div class="meta-row">
-            <span v-if="meta" class="chip"><span class="dot" :style="{ background: meta.moduleColor }" />{{ meta.moduleName }}</span>
+            <span v-if="meta" class="chip"><span class="dot" style="background: var(--accent)" />{{ meta.moduleName }}</span>
             <span class="chip">{{ stars(kp.difficulty) }} {{ ['', '入门', '中阶', '进阶'][kp.difficulty] }}</span>
             <span class="chip">⏱ 约 {{ kp.minutes }} 分钟</span>
             <span v-for="t in kp.tags" :key="t" class="chip">#{{ t }}</span>
@@ -95,6 +95,14 @@ function stars(d) {
             <div class="section-title">🔗 前置知识</div>
             <div class="prereq-list">
               <span v-for="p in kp.prereqs" :key="p" class="chip" @click="go('/kp/' + p)">{{ p }}</span>
+            </div>
+          </div>
+          <div v-if="kp.related?.length" class="gap-t">
+            <div class="section-title">🧠 相似关联（算法推荐）</div>
+            <div class="prereq-list">
+              <span v-for="r in kp.related" :key="r.id" class="chip" @click="go('/kp/' + r.id)">
+                {{ r.title }} <span class="t-caption t-num c-muted">{{ r.score }}%</span>
+              </span>
             </div>
           </div>
         </div>

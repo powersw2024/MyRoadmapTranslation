@@ -3,12 +3,12 @@
    ============================================================ */
 
 :root {
-  --accent: #f97316;          /* Rust 橙 */
-  --accent-2: #8b5cf6;        /* 紫 */
-  --accent-3: #22d3ee;        /* 青，用于强调渐变 */
+  --accent: #f97316;          /* Rust 橙：全站唯一强调色 */
+  --accent-2: #8b5cf6;        /* 仅少量点缀（测验解析边框） */
+  --node: #64748b;            /* 图谱节点中性色（未掌握/学习中共用） */
   --ok: #34d399;
   --bad: #f87171;
-  --gold: #fbbf24;
+  --gold: #fbbf24;            /* 掌握状态专用 */
   --radius: 16px;
   --radius-sm: 10px;
   --font-sans: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
@@ -32,6 +32,7 @@
   --muted: #93a0b8;
   --faint: #5d6a85;
   --edge: #33436b;
+  --node: #8fa0bd;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   --code-bg: #0d1322;
   --tip-bg: #1a2338;
@@ -52,6 +53,7 @@
   --muted: #5c6779;
   --faint: #9aa4b5;
   --edge: #c3cddf;
+  --node: #5b6b84;
   --shadow: 0 10px 30px rgba(30, 41, 66, 0.1);
   --code-bg: #eef1f7;
   --tip-bg: #ffffff;
@@ -74,7 +76,7 @@ body {
   transition: background-color 0.35s var(--ease), color 0.35s var(--ease);
 }
 
-a { color: var(--accent-3); text-decoration: none; }
+a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 button { font-family: inherit; }
@@ -154,7 +156,7 @@ button { font-family: inherit; }
 .progress-bar { width: 90px; height: 6px; border-radius: 999px; background: var(--border-soft); overflow: hidden; }
 .progress-fill {
   height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   transition: width 0.7s var(--ease);
 }
 
@@ -257,6 +259,7 @@ button { font-family: inherit; }
 }
 .legend-item:hover { background: var(--panel-hover); color: var(--text); }
 .legend-item.off { opacity: 0.35; }
+.legend-divider { height: 1px; background: var(--border-soft); margin: 6px 0; }
 .legend-bar { height: 4px; border-radius: 999px; background: var(--border-soft); overflow: hidden; width: 46px; }
 .legend-bar > div { height: 100%; background: currentColor; transition: width 0.6s var(--ease); }
 
@@ -287,7 +290,7 @@ button { font-family: inherit; }
   padding: 14px 18px;
   display: flex; flex-direction: column; gap: 3px;
 }
-.stat-card .num { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; background: linear-gradient(120deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.stat-card .num { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent); }
 .stat-card .label { font-size: 12px; color: var(--muted); }
 
 /* ---------- 首页其余区块 ---------- */
@@ -371,7 +374,7 @@ button { font-family: inherit; }
 .side-card .section-title { font-size: 13.5px; }
 .ref-list li { padding: 6px 0; border-bottom: 1px dashed var(--border-soft); font-size: 13px; line-height: 1.6; list-style: none; }
 .ref-list li:last-child { border-bottom: none; }
-.ref-list a { color: var(--accent-3); word-break: break-all; }
+.ref-list a { color: var(--accent); word-break: break-all; }
 
 .prereq-list { display: flex; flex-wrap: wrap; gap: 6px; }
 
@@ -559,7 +562,7 @@ button { font-family: inherit; }
   font-size: clamp(24px, 3.4vw, 32px);
   font-weight: 800;
   letter-spacing: 0.5px;
-  background: linear-gradient(115deg, var(--text) 40%, var(--accent) 72%, var(--accent-2) 100%);
+  background: linear-gradient(115deg, var(--text) 45%, var(--accent) 85%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

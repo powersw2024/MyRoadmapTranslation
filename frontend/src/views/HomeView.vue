@@ -89,7 +89,7 @@ const stats = computed(() => {
         v-for="(m, i) in manifest.modules"
         :key="m.id"
         class="card card-hover module-card stagger"
-        :style="{ '--mc': m.color, animationDelay: 260 + i * 50 + 'ms' }"
+        :style="{ animationDelay: 260 + i * 50 + 'ms' }"
         @click="go('/module/' + m.id)"
       >
         <div class="m-head">
@@ -101,7 +101,7 @@ const stats = computed(() => {
           <div
             class="grow-bar"
             :class="{ go: barsGo }"
-            :style="{ '--bar-w': (moduleProgress[m.id]?.pct || 0) + '%', background: m.color }"
+            :style="{ '--bar-w': (moduleProgress[m.id]?.pct || 0) + '%' }"
           />
         </div>
         <div class="m-meta">

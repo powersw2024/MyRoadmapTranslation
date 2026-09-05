@@ -21,8 +21,8 @@ function toggle(cid) {
 function kpClass(k) {
   return progress.value.mastered[k.id] ? 'done' : ''
 }
-function dotColor(m, k) {
-  return progress.value.mastered[k.id] ? 'var(--ok)' : m.color
+function dotColor(k) {
+  return progress.value.mastered[k.id] ? 'var(--ok)' : 'var(--faint)'
 }
 </script>
 
@@ -32,9 +32,9 @@ function dotColor(m, k) {
       <a href="#/">首页</a><span class="sep">/</span><span>{{ module.title }}</span>
     </div>
 
-    <div class="card page-head pad-lg stagger" :style="{ borderTop: '3px solid ' + module.color }">
+    <div class="card page-head pad-lg stagger" style="border-top: 3px solid var(--accent)">
       <div class="meta-row">
-        <span class="chip"><span class="dot" :style="{ background: module.color }" />模块 {{ module.num }}</span>
+        <span class="chip"><span class="dot" style="background: var(--accent)" />模块 {{ module.num }}</span>
         <span class="chip">{{ module.chapters.length }} 章</span>
         <span class="chip">{{ module.chapters.reduce((s, c) => s + c.kps.length, 0) }} 个知识点</span>
       </div>
@@ -49,7 +49,7 @@ function dotColor(m, k) {
       :style="{ animationDelay: ci * 60 + 'ms' }"
     >
       <div class="chapter-head" :class="{ open: isOpen(c.id) }" @click="toggle(c.id)">
-        <span class="c-num" :style="{ background: module.color }">{{ module.num }}.{{ ci + 1 }}</span>
+        <span class="c-num" style="background: var(--accent)">{{ module.num }}.{{ ci + 1 }}</span>
         <span class="c-title t-item">{{ c.title }}</span>
         <span class="t-caption c-faint">{{ c.kps.length }} 个知识点</span>
         <span class="arrow">▶</span>
@@ -72,7 +72,7 @@ function dotColor(m, k) {
                 :class="kpClass(k)"
                 @click="go('/kp/' + k.id)"
               >
-                <span class="dot" :style="{ background: dotColor(module, k) }" />
+                <span class="dot" :style="{ background: dotColor(k) }" />
                 {{ k.title }}
                 <span v-if="progress.mastered[k.id]" class="star">✓</span>
                 <span v-if="k.hasDetail" class="c-faint" style="font-size: 10px">📝</span>

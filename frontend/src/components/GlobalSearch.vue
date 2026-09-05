@@ -75,7 +75,7 @@ function onKey(e) {
         :class="{ active: i === activeIdx }"
         @click="pick(k)"
       >
-        <span class="dot" :style="{ background: k.moduleColor }" />
+        <span class="dot" style="background: var(--accent)" />
         <span>{{ k.title }}</span>
         <span class="t-caption c-faint" style="margin-left: auto">{{ k.moduleName }}</span>
       </div>

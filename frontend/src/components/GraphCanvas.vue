@@ -19,6 +19,9 @@ const { theme } = useTheme()
 const container = ref(null)
 const tip = ref({ show: false, x: 0, y: 0, title: '', sub: '' })
 const hiddenModules = ref(new Set())
+// 两类关系的显示开关：前置（手工声明）与相似（算法发现）
+const showPrereqs = ref(true)
+const showSimilar = ref(true)
 // 帧预算守卫：连续掉帧时逐级降级（0 正常 → 1 隐藏标签 → 2 隐藏边），恢复后回升
 const lodLevel = ref(0)
 
@@ -176,7 +179,13 @@ function buildGraph() {
   }
   for (const [from, to] of manifest.value.edges) {
     if (graph.hasNode(from) && graph.hasNode(to) && !graph.hasEdge(from, to)) {
-      graph.addEdge(from, to, { size: 0.7, color: '#8899bb', hidden: false })
+      graph.addEdge(from, to, { size: 0.7, kind: 'prereq', hidden: false })
+    }
+  }
+  // 相似算法边：紫色、更细，与手工前置在视觉上明确区分
+  for (const [a, b, score] of manifest.value.similarEdges || []) {
+    if (graph.hasNode(a) && graph.hasNode(b) && !graph.hasEdge(a, b)) {
+      graph.addEdge(a, b, { size: 0.45, kind: 'similar', score, hidden: false })
     }
   }
 
@@ -295,13 +304,17 @@ function createRenderer() {
       }
 
       if (mastered) {
+        // 掌握：金色实心 + 呼吸边（全站唯一的高亮色）
         res.type = 'bordered'
-        res.borderColor = '#fbbf24'
+        res.color = '#fbbf24'
+        res.borderColor = '#f59e0b'
         res.borderSize = 2.3 + 0.7 * (0.5 + 0.5 * Math.sin(now / 420))
         res.forceLabel = true
         scale *= 1 + 0.05 * Math.sin(now / 420)
       } else {
-        res.color = read ? withAlpha(data.color, 0.78) : withAlpha(data.color, 0.42)
+        // 未掌握/学习中：统一中性色，靠透明度区分状态
+        const neutral = cssVar('--node', '#64748b')
+        res.color = read ? withAlpha(neutral, 0.95) : withAlpha(neutral, 0.62)
       }
 
       // 点亮闪光：先膨胀后回落的单次脉冲
@@ -321,12 +334,19 @@ function createRenderer() {
     },
     edgeReducer: (edge, data) => {
       const res = { ...data }
-      res.color = cssVar('--edge', '#33436b')
+      const kind = data.kind || 'prereq'
+      // 前置 = 实线灰；相似 = 更淡的灰（同一色系，透明度区分层级）
+      res.color =
+        kind === 'similar'
+          ? withAlpha(cssVar('--edge', '#33436b'), 0.5)
+          : cssVar('--edge', '#33436b')
       if (hovered && (graph.source(edge) === hovered || graph.target(edge) === hovered)) {
         res.color = cssVar('--accent', '#f97316')
-        res.size = 1.6
+        res.size = kind === 'similar' ? 1.1 : 1.6
         res.zIndex = 1
       }
+      if (kind === 'prereq' && !showPrereqs.value) res.hidden = true
+      if (kind === 'similar' && !showSimilar.value) res.hidden = true
       if (
         hiddenModules.value.has(graph.getNodeAttribute(graph.source(edge), 'moduleId')) ||
         hiddenModules.value.has(graph.getNodeAttribute(graph.target(edge), 'moduleId'))
@@ -421,6 +441,13 @@ function toggleModule(id) {
   recountVisible()
 }
 
+const similarCount = computed(() => (manifest.value?.similarEdges || []).length)
+function toggleRelations(kind) {
+  if (kind === 'prereq') showPrereqs.value = !showPrereqs.value
+  else showSimilar.value = !showSimilar.value
+  renderer?.refresh()
+}
+
 const visibleCount = ref(0)
 function recountVisible() {
   if (!graph) { visibleCount.value = 0; return }
@@ -468,7 +495,7 @@ const legend = computed(() => {
         if (progress.value.mastered[k.id]) done++
       }
     }
-    return { id: m.id, title: m.title, icon: m.icon, color: m.color, total, done }
+    return { id: m.id, title: m.title, icon: m.icon, total, done }
   })
 })
 </script>
@@ -484,7 +511,7 @@ const legend = computed(() => {
         :key="m.id"
         class="legend-item"
         :class="{ off: hiddenModules.has(m.id) }"
-        :style="{ color: m.color }"
+        style="color: var(--accent)"
         @click="toggleModule(m.id)"
       >
         <span>{{ m.icon }}</span>
@@ -492,10 +519,19 @@ const legend = computed(() => {
         <span class="legend-bar"><div :style="{ width: m.total ? (m.done / m.total) * 100 + '%' : 0 }" /></span>
         <span class="t-caption t-num">{{ m.done }}/{{ m.total }}</span>
       </div>
+      <div class="legend-divider" />
+      <div class="legend-item" :class="{ off: !showPrereqs }" style="color: var(--muted)" @click="toggleRelations('prereq')">
+        <span class="c-muted">—</span>
+        <span class="c-text" style="flex: 1">前置依赖（手工）</span>
+      </div>
+      <div class="legend-item" :class="{ off: !showSimilar }" style="color: var(--muted)" @click="toggleRelations('similar')">
+        <span class="c-faint">┈</span>
+        <span class="c-text" style="flex: 1">相似关联（算法）</span>
+      </div>
     </div>
 
     <div class="graph-stats">
-      {{ visibleCount }} 个知识点 · {{ graph ? graph.order : 0 }} 节点 / {{ graph ? graph.size : 0 }} 边 · 拖动节点 / 滚轮缩放 / 双击复位
+      {{ visibleCount }} 个知识点 · {{ graph ? graph.size : 0 }} 边（{{ similarCount }} 条算法相似） · 拖动节点 / 滚轮缩放 / 双击复位
       <span v-if="lodLevel > 0" class="c-gold"> · 性能模式 L{{ lodLevel }}</span>
     </div>
 
