@@ -47,6 +47,13 @@ impl Store {
             .map(|(p, k)| json!([p, k]))
             .collect();
 
+        // 相似算法边：[a, b, 分数]
+        let similar_edges: Vec<Value> = self
+            .similar_edges
+            .iter()
+            .map(|e| json!([e.a, e.b, (e.score * 1000.0).round() / 1000.0]))
+            .collect();
+
         let unplaced: Vec<Value> = self
             .unplaced
             .iter()
@@ -77,6 +84,7 @@ impl Store {
             "modules": modules,
             "unplaced": unplaced,
             "edges": edges,
+            "similarEdges": similar_edges,
         })
     }
 
@@ -84,12 +92,26 @@ impl Store {
     pub fn kp_json(&self, id: &str) -> Option<Value> {
         let k = self.kps.get(id)?;
         let module = self.module_of_kp(id);
+        // 相似算法推荐的关联知识点（排除显式前置，附分数）
+        let related: Vec<Value> = crate::similarity::related_of(&self.similar_edges, id)
+            .into_iter()
+            .filter(|(rid, _)| !k.prereqs.contains(rid))
+            .filter_map(|(rid, score)| {
+                self.kps.get(&rid).map(|r| {
+                    json!({
+                        "id": r.id, "title": r.title,
+                        "score": (score * 100.0).round() as u32,
+                    })
+                })
+            })
+            .collect();
         json!({
             "id": k.id, "title": k.title, "difficulty": k.difficulty,
             "minutes": k.minutes, "summary": k.summary, "outline": k.outline,
             "prereqs": k.prereqs, "task": k.task,
             "refs": k.refs, "quiz": k.quiz, "tags": k.tags,
             "detailHtml": k.detail_html,
+            "related": related,
             "moduleId": module.map(|m| m.id.clone()),
             "moduleTitle": module.map(|m| m.title.clone()),
             "moduleColor": module.map(|m| m.color.clone()),

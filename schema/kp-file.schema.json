@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/powersw2024/MyRoadmapTranslation/main/schema/kp-file.schema.json",
+  "title": "RustWay 知识点文件（收集格式）",
+  "description": "提交/收集的 JSON 文件格式：放到 content/kps/<任意名称>.json 即被自动加载；以下划线开头的文件视为草稿不参与发布。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kps"],
+  "properties": {
+    "kps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "kp.schema.json" }
+    }
+  }
+}

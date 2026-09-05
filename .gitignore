@@ -4,3 +4,4 @@ frontend/node_modules
 .DS_Store
 .mimosa/
 .playwright-mcp
+data/

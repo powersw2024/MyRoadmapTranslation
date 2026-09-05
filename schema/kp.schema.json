@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/powersw2024/MyRoadmapTranslation/main/schema/kp.schema.json",
+  "title": "RustWay 知识点（单个）",
+  "description": "知识点的完整定义。内容文件放在 content/kps/ 下即被自动加载；提交前请用 `rustway import <file>` 或 `cargo run -- validate` 自检。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "difficulty", "minutes", "summary", "task", "refs", "quiz"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "maxLength": 32,
+      "description": "全局唯一标识，建议格式 k<模块><章><序>，如 k1-3-1"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 40,
+      "description": "知识点标题：简短、可搜索、独立成义"
+    },
+    "difficulty": {
+      "type": "integer",
+      "enum": [1, 2, 3],
+      "description": "1=入门 ★☆☆  2=中阶 ★★☆  3=进阶 ★★★"
+    },
+    "minutes": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 600,
+      "description": "预计学习时长（分钟），含完成验证任务的时间"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 80,
+      "description": "一句话概述，显示在知识图谱提示与卡片上；独立成句"
+    },
+    "outline": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "minLength": 4 },
+      "description": "要点大纲；detail_md 缺失时作为页面正文展示"
+    },
+    "prereqs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/kpId" },
+      "description": "前置知识点 id 列表；必须已存在，且整张前置图不允许成环（服务端用 Kahn 算法检测）。宁多勿漏。"
+    },
+    "task": {
+      "type": "string",
+      "minLength": 20,
+      "description": "动手验证任务：写清『做什么 + 如何客观确认做对了』，须在终端或测试中可完成"
+    },
+    "refs": {
+      "type": "array",
+      "minItems": 1,
+      "description": "引用出处，至少 1 条；优先官方文档 > 权威教材 > 经典论文",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["t", "u"],
+        "properties": {
+          "t": { "type": "string", "minLength": 4, "description": "出处标题" },
+          "u": { "type": "string", "pattern": "^https?://", "description": "http(s) 链接" }
+        }
+      }
+    },
+    "quiz": {
+      "type": "array",
+      "minItems": 1,
+      "description": "自测题（测试用例）：题干须独立可答（先答后看），干扰项要有迷惑性，解析说明『为什么对、为什么错』。答对全部题目会自动点亮『掌握』状态。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["q", "opts", "answer", "why"],
+        "properties": {
+          "q": { "type": "string", "minLength": 8, "description": "题干" },
+          "opts": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 6,
+            "items": { "type": "string", "minLength": 1 },
+            "description": "选项，2~6 个"
+          },
+          "answer": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "正确选项下标（0 起）。必须小于 opts 长度——该跨字段约束由服务端校验器强制执行"
+          },
+          "why": { "type": "string", "minLength": 4, "description": "解析" }
+        }
+      }
+    },
+    "detail_md": {
+      "type": "string",
+      "pattern": "^content/.+\\.md$",
+      "description": "可选。详细讲解 Markdown 路径（相对仓库根）；文件必须随提交一并给出"
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "标签：参与相似算法分词（权重最高），是自动关联的主要语义锚点"
+    },
+    "author": {
+      "type": "string",
+      "description": "可选。贡献者署名（GitHub 用户名）；当前加载器会忽略该字段，仅用于收集阶段的归属记录"
+    }
+  },
+  "$defs": {
+    "kpId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

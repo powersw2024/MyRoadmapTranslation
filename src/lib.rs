@@ -5,8 +5,15 @@
 //! 新增知识点**不需要修改任何 Rust 代码**：新建 JSON 文件、在 curriculum.json 中挂载即可。
 
 pub mod api;
+pub mod db;
+pub mod similarity;
 
 use serde::{Deserialize, Serialize};
+
+/// 知识点加载规范（JSON Schema 2020-12），随二进制发布：
+/// 社区按规范编写 JSON 即可通过 `rustway import <file>` 校验入库。
+pub const KP_SCHEMA: &str = include_str!("../schema/kp.schema.json");
+pub const KP_FILE_SCHEMA: &str = include_str!("../schema/kp-file.schema.json");
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -110,6 +117,8 @@ pub struct Store {
     pub errors: Vec<String>,
     /// 警告（非阻塞：建议修复的质量问题，API 与 validate 命令可见）
     pub warnings: Vec<String>,
+    /// 相似算法自动发现的关联边（与手工前置互补）
+    pub similar_edges: Vec<similarity::SimilarEdge>,
 }
 
 impl Store {
@@ -327,6 +336,10 @@ pub fn load_store(content_dir: &Path) -> Result<Store, String> {
         errors.push(format!("知识点前置依赖存在环: {detail}"));
     }
 
+    // 相似算法自动关联：新插入的知识点即使未声明任何前置，
+    // 也会按语义相似度接入图中最相关的节点（「任意插入」的另一半保障）
+    let similar_edges = similarity::build_similarity_edges(&kps, 0.16, 3);
+
     // 图谱孤岛检测（无前置也无后继的节点会让图谱退化成散点）
     let mut has_dependent: HashSet<&str> = HashSet::new();
     for kp in kps.values() {
@@ -351,6 +364,7 @@ pub fn load_store(content_dir: &Path) -> Result<Store, String> {
         unplaced,
         errors,
         warnings,
+        similar_edges,
     })
 }
 

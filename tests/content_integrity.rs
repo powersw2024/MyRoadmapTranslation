@@ -100,6 +100,45 @@ fn api_manifest_is_consistent() {
 }
 
 #[test]
+fn similarity_engine_connects_related_kps() {
+    let store = real_store();
+    // 真实内容体量下，相似算法应自动发现可观的关联边
+    assert!(
+        store.similar_edges.len() >= 30,
+        "相似关联边过少（{}），算法阈值或分词可能有问题",
+        store.similar_edges.len()
+    );
+    // 分数在 (0, 1]，且边端点都存在、有序去重
+    for e in &store.similar_edges {
+        assert!(e.score > 0.0 && e.score <= 1.0, "非法分数: {:?}", e);
+        assert!(e.a < e.b, "边端点应有序: {:?}", e);
+        assert!(store.kps.contains_key(&e.a) && store.kps.contains_key(&e.b));
+    }
+    // manifest 暴露
+    let manifest = store.manifest_json();
+    let similar = manifest["similarEdges"].as_array().unwrap();
+    assert_eq!(similar.len(), store.similar_edges.len());
+}
+
+#[test]
+fn kp_api_exposes_algorithmic_related_list() {
+    let store = real_store();
+    // 找一个有相似邻居的知识点
+    let (id, _) = crate_path_fix(&store);
+    let kp = store.kp_json(&id).expect("kp_json");
+    let related = kp["related"].as_array().expect("related").clone();
+    assert!(!related.is_empty(), "知识点 {id} 应有算法推荐的关联知识点");
+    let first = &related[0];
+    assert!(first["score"].as_u64().unwrap() >= 10, "分数应为百分制");
+}
+
+/// 辅助：取相似边最多的一条边的任一端点。
+fn crate_path_fix(store: &rustway::Store) -> (String, f32) {
+    let e = store.similar_edges.first().expect("至少应有一条相似边");
+    (e.a.clone(), e.score)
+}
+
+#[test]
 fn kp_detail_api_returns_rendered_html() {
     let store = real_store();
     // 找一个带 detail_md 的知识点
