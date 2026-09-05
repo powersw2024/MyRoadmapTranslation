@@ -1,0 +1,58 @@
+{
+  "kps": [
+    {
+      "id": "sg-1pgx3xch",
+      "title": "哈佛 CS50P：Python 入门与 Pythonic 写法",
+      "difficulty": 1,
+      "minutes": 600,
+      "summary": "CS50 番外篇：零基础友好地讲透 Python 基础与进阶语法、代码测试与异常处理，是学习曲线最平缓的 Python 入门课。",
+      "outline": [
+        "课程定位：David J. Malan 主讲，无需任何编程基础，覆盖 Python 基础与进阶语法和各种「Pythonic」写法",
+        "进阶内容：Python 特色标准库、单元测试（pytest 风格断言）与异常处理的较深入探究",
+        "经典作业风格：如 Mario 金字塔——用循环与字符串打印直角塔（Python 版已验证输出 # / ## / ### / ####）：`for i in range(1, n+1): print(\"#\"*i)`",
+        "Rust 对照（同一思路的写法）：`for i in 1..=n { println!(\"{}\", \"#\".repeat(i as usize)); }` —— 字符串重复 Python 用 `*` 运算符，Rust 用 `.repeat()` 方法",
+        "与 CS50x 的关系：CS50x 用 C 建立底层直觉，CS50P 用 Python 建立生产力；两者都零基础可学",
+        "课程资源：官网 cs50.harvard.edu/python/2022/（讲义与作业全开源），B 站有中文字幕视频"
+      ],
+      "prereqs": ["sg-21bwmqda"],
+      "task": "在课程官网完成 Sets I/II 之前的任意一讲的问题集；然后把 Mario 金字塔改写为「右对齐金字塔」（每行先打印 n-i 个空格再打印 i 个 #），用 python3 运行 n=4 应得到 3/2/1/0 个空格开头的四行塔——输出正确即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/编程入门/Python/CS50P.md",
+          "u": "https://cs50.harvard.edu/python/2022/"
+        },
+        {
+          "t": "CS50P 官方课程网站（2022，讲义与作业全开源）",
+          "u": "https://cs50.harvard.edu/python/2022/"
+        },
+        {
+          "t": "Python 官方教程（与课程配套的权威参考）",
+          "u": "https://docs.python.org/zh-cn/3/tutorial/"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "下列关于 CS50P 的说法哪一项是正确的？",
+          "opts": [
+            "必须先学完 C 语言才能选",
+            "它深入探究 Python 的代码测试与异常处理，零基础友好",
+            "只讲 Web 开发框架",
+            "作业需要付费购买"
+          ],
+          "answer": 1,
+          "why": "CS50P 无需编程基础，除语法外还对 Python 特色库、代码测试（如单元测试）与异常处理较深入探究，作业全免费开源。"
+        },
+        {
+          "kind": "choice",
+          "q": "在 Python 中打印字符串 \"#\" 重复 i 次的正确写法是？",
+          "opts": ["\"#\" * i", "\"#\" ** i", "repeat(\"#\", i)", "\"#\".times(i)"],
+          "answer": 0,
+          "why": "Python 用 `*` 运算符实现序列重复；Rust 中对应的是 `\"#\".repeat(i)` 方法——两种语言的惯用写法差异正是双语言学习的要点。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["Python", "入门课程", "CS50"],
+      "author": "powersw2024"
+    }
+  ]
+}
