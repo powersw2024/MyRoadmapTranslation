@@ -1,0 +1,63 @@
+{
+  "kps": [
+    {
+      "id": "cn-34kdkop0",
+      "title": "剑指 Offer 4：二维数组中的查找",
+      "difficulty": 2,
+      "minutes": 25,
+      "summary": "行、列均递增的二维矩阵中查数：从右上角出发，大于目标下移、小于目标左移，每步排除一行或一列，O(M+N)。",
+      "outline": [
+        "题目：矩阵每行从左到右递增、每列从上到下递增，判断 target 是否存在（示例矩阵 target=5 → true，target=20 → false）",
+        "性质：对任意元素，小于它的在左边、大于它的在下边——右上角是唯一同时利用两个方向的观察点",
+        "策略：从右上角 (0, cols-1) 开始；相等返回 true；target 更大则行下移 r++；target 更小则列左移 c--；越界仍未命中返回 false",
+        "Python 实现（已验证输出 True / False）：`def find(m, t):\n r, c = 0, len(m[0])-1\n while r < len(m) and c >= 0:\n  if m[r][c]==t: return True\n  if t > m[r][c]: r+=1\n  else: c-=1\n return False`",
+        "Rust 实现注意点（已验证输出 true / false）：列下标用 usize 时 `c-1` 在 c=0 会下溢——用 `c.wrapping_sub(1)` 并以 `c != usize::MAX` 判退出，这是 Rust 无符号整数的惯用防御",
+        "复杂度：每步排除一行或一列，最多 M+N 步；空间 O(1)"
+      ],
+      "prereqs": [],
+      "task": "把矩阵按对角线转置思路反向验证：在上述示例矩阵上分别用 Python 与 Rust 实现从「左下角」出发的对称版本（小于目标右移、大于目标上移），两版对 target=5/20 的输出应与右上角版完全一致。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CS-Notes-master/notes/4. 二维数组中的查找.md",
+          "u": "https://github.com/CyC2018/CS-Notes/blob/master/notes/4.%20%E4%BA%8C%E7%BB%B4%E6%95%B0%E7%BB%84%E4%B8%AD%E7%9A%84%E6%9F%A5%E6%89%BE.md"
+        },
+        {
+          "t": "牛客网：二维数组中的查找（在线判题）",
+          "u": "https://www.nowcoder.com/practice/abc3fe2ce8e146608e868a70efebf62e?tpId=13&tqId=11154"
+        },
+        {
+          "t": "Rust 标准库：wrapping_sub（无符号下溢防御）",
+          "u": "https://doc.rust-lang.org/std/primitive.usize.html#method.wrapping_sub"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么从右上角（或左下角）出发能线性查完整张矩阵？",
+          "opts": [
+            "因为右上角一定是矩阵最大值",
+            "因为该位置的两个移动方向恰好对应「大于/小于」两种比较结果，每步可排除一整行或一整列",
+            "因为矩阵是对角化的",
+            "因为随机游走期望 O(M+N)"
+          ],
+          "answer": 1,
+          "why": "右上角元素左边更小、下边更大：与目标比较后可确定性地选择左移或下移，两个方向各最多走一遍，合计 O(M+N)。"
+        },
+        {
+          "kind": "choice",
+          "q": "Rust 中用 usize 做列下标 c，当 c=0 还要执行 c--，正确做法是？",
+          "opts": [
+            "直接写 c = c - 1，Rust 会自动变回大数",
+            "用 c = c.wrapping_sub(1) 并配合哨兵判断，或改用 isize",
+            "把列循环删掉",
+            "用 try c -= 1 catch"
+          ],
+          "answer": 1,
+          "why": "release 模式下 usize 无符号下溢会回绕成 usize::MAX（debug 模式则 panic）；显式 wrapping_sub 配合哨兵判断或改用有符号 isize 都是安全做法。"
+        }
+      ],
+      "domain": "算法",
+      "tags": ["二维数组", "查找", "剑指Offer"],
+      "author": "powersw2024"
+    }
+  ]
+}
