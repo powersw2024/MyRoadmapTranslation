@@ -1,0 +1,453 @@
+{
+  "kps": [
+    {
+      "id": "k1-1-1",
+      "title": "注释与文档注释",
+      "difficulty": 1,
+      "minutes": 15,
+      "summary": "// 行注释、/// 文档注释、//! 包级文档：注释也是面向读者的接口。",
+      "outline": ["// 与 /* */ 的常规用法", "/// 写在条目上方，生成 rustdoc 文档", "//! 写在文件/模块顶部描述整体", "约定：解释「为什么」而不是复述代码"],
+      "prereqs": ["k0-2-3"],
+      "task": "给一个函数写 /// 文档注释并附 ``` 示例代码块，运行 cargo doc --open 确认文档页展示正常。",
+      "refs": [
+        { "t": "The Rust Book · How to Document", "u": "https://doc.rust-lang.org/book/ch14-02-publishing-to-crates-io.html#making-useful-documentation-comments" }
+      ],
+      "quiz": [
+        { "q": "生成并浏览本地文档的命令是：", "opts": ["cargo doc --open", "cargo run --doc", "cargo readme", "rustc --doc"], "answer": 0, "why": "cargo doc 用 rustdoc 生成 HTML，--open 直接在浏览器打开。" }
+      ],
+      "tags": ["语法", "文档"]
+    },
+    {
+      "id": "k1-1-2",
+      "title": "变量、可变性与遮蔽",
+      "difficulty": 1,
+      "minutes": 25,
+      "summary": "let 默认不可变，mut 才可变；遮蔽允许重新声明同名变量（新绑定，非修改）。",
+      "outline": ["不可变是默认：let x = 5 后 x = 6 编译失败", "let mut：可变绑定", "遮蔽 shadowing：同名新绑定，可改类型；与 mut 的区别", "const 与 let 的三点差异（类型标注/编译期/作用域）"],
+      "prereqs": ["k0-2-3"],
+      "task": "写程序分别演示：不可变赋值报错、mut 修改成功、遮蔽改变类型（let s = \"3\"; let s: i32 = s.parse().unwrap()），运行并记录编译器提示原文。",
+      "refs": [
+        { "t": "The Rust Book 3.1 Variables and Mutability", "u": "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html" }
+      ],
+      "quiz": [
+        { "q": "遮蔽（shadowing）与 mut 的关键区别是：", "opts": ["没有区别", "遮蔽创建新绑定（可换类型），mut 是原地修改（类型不变）", "遮蔽只能在循环里用", "mut 更安全"], "answer": 1, "why": "let x = ...; let x = ...; 是两个变量共用名字；mut 只有一个变量。" },
+        { "q": "const MAX: u32 = 100_000; 与 let 的区别不包括：", "opts": ["const 必须标注类型", "const 在编译期求值", "const 可在任意作用域声明", "const 可以在运行时计算"], "answer": 3, "why": "const 必须是编译期常量，不能依赖运行时结果。" }
+      ],
+      "detail_md": "content/rust/variables.md",
+      "tags": ["语法", "变量"]
+    },
+    {
+      "id": "k1-1-3",
+      "title": "基本数据类型",
+      "difficulty": 1,
+      "minutes": 30,
+      "summary": "标量类型（整数/浮点/布尔/字符）与复合类型（元组/数组），以及溢出行为。",
+      "outline": ["整数：i8..i128/u8..u128/isize/usize 与默认 i32", "浮点 f32/f64 与精度陷阱", "bool 与 char（4 字节 Unicode 标量）", "元组解构与数组定长", "整型溢出：debug panic / release 回绕"],
+      "prereqs": ["k1-1-2"],
+      "task": "写程序打印 u8::MAX、i32::MIN、'中' 的字节数（std::mem::size_of_val），并触发一次 debug 下整型溢出 panic，阅读报错信息。",
+      "refs": [
+        { "t": "The Rust Book 3.2 Data Types", "u": "https://doc.rust-lang.org/book/ch03-02-data-types.html" }
+      ],
+      "quiz": [
+        { "q": "u8 类型的取值范围是：", "opts": ["-128..=127", "0..=255", "0..=256", "1..=128"], "answer": 1, "why": "无符号 8 位：2^8 = 256 个值，0..=255。" },
+        { "q": "release 模式下 255u8 + 1 的默认行为是：", "opts": ["panic", "回绕（wrapping）为 0", "变成 u16", "未定义行为"], "answer": 1, "why": "release 默认回绕且编译器不警告；需要安全语义用 checked_add。" }
+      ],
+      "detail_md": "content/rust/data-types.md",
+      "tags": ["语法", "类型"]
+    },
+    {
+      "id": "k1-1-4",
+      "title": "函数与表达式",
+      "difficulty": 1,
+      "minutes": 25,
+      "summary": "函数参数必须标类型；Rust 一切皆表达式，块尾表达式即返回值。",
+      "outline": ["fn 签名：参数必须显式类型标注，返回值 -> T", "语句 vs 表达式：let 是语句，x+1 是表达式", "块尾不带分号的表达式作为返回值", "提前返回用 return"],
+      "prereqs": ["k1-1-2"],
+      "task": "写函数 add(a: i32, b: i32) -> i32，分别用块尾表达式与 return 实现两种版本；故意在块尾加分号观察编译器提示的 () 类型错误。",
+      "refs": [
+        { "t": "The Rust Book 3.3 Functions", "u": "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html" }
+      ],
+      "quiz": [
+        { "q": "fn f() -> i32 { 5 } 与 fn f() -> i32 { 5; } 的区别：", "opts": ["相同", "后者块尾是语句，块类型为 ()，与返回类型 i32 不符而编译错误", "后者返回 5", "后者更慢"], "answer": 1, "why": "分号把表达式变成语句丢弃值，块返回 ()，类型不匹配报错。" }
+      ],
+      "detail_md": "content/rust/functions.md",
+      "tags": ["语法", "函数"]
+    },
+    {
+      "id": "k1-1-5",
+      "title": "println! 与格式化",
+      "difficulty": 1,
+      "minutes": 20,
+      "summary": "宏初步：println! 与捕获标识符、位置/命名参数、格式化 trait。",
+      "outline": ["println! 是宏不是函数：编译期检查格式串", "内嵌表达式 {x} 与 {arg:>width$}", "Display 与 Debug（{:?} 与 {:#?}）", "为什么自己的类型需要 derive(Debug) 才能打印"],
+      "prereqs": ["k1-1-2"],
+      "task": "用 {:#?} 打印一个嵌套元组；给自定义结构体 derive(Debug) 后打印，再删掉 derive 观察编译错误，理解 trait 约束来源。",
+      "refs": [
+        { "t": "std::fmt 文档", "u": "https://doc.rust-lang.org/std/fmt/" }
+      ],
+      "quiz": [
+        { "q": "println!(\"{:?}\", value) 使用的是：", "opts": ["Display", "Debug", "Pointer", "Octal"], "answer": 1, "why": "{:?} 走 Debug trait，适合调试输出；{} 走 Display，面向用户。" }
+      ],
+      "tags": ["语法", "宏"]
+    },
+    {
+      "id": "k1-2-1",
+      "title": "if/else 与条件表达式",
+      "difficulty": 1,
+      "minutes": 15,
+      "summary": "条件必须是 bool；if 是表达式，可直接赋值。",
+      "outline": ["if condition 不加括号、条件必须 bool（无真值转换）", "if/else if/else 链", "作为表达式：let n = if cond { 5 } else { 6 }; 分支类型须一致", "与三元运算符的关系：Rust 没有 ?:，if 表达式承担该角色"],
+      "prereqs": ["k1-1-4"],
+      "task": "实现 fizzbuzz 单分支逻辑：用 if 表达式直接给变量赋值并打印；再尝试 if 5 {} 观察类型错误提示。",
+      "refs": [
+        { "t": "The Rust Book 3.5 Control Flow", "u": "https://doc.rust-lang.org/book/ch03-05-control-flow.html" }
+      ],
+      "quiz": [
+        { "q": "let x = if true { 1 } else { \"a\" }; 的结果：", "opts": ["x 是 1", "编译错误：分支类型不一致", "x 是 \"a\"", "运行时 panic"], "answer": 1, "why": "两个分支类型必须统一，否则无法推断 x 的类型。" }
+      ],
+      "tags": ["语法", "控制流"]
+    },
+    {
+      "id": "k1-2-2",
+      "title": "loop/while/for 三种循环",
+      "difficulty": 1,
+      "minutes": 20,
+      "summary": "loop 可 break 出值；for 遍历迭代器与区间；循环标签处理嵌套。",
+      "outline": ["loop：专用无限循环，break value 返回", "while cond 与 while let", "for x in 0..5 与 .iter()/.iter_mut()/.into_iter()", "'outer: 循环标签跳出多层", "Range：.. 与 ..="],
+      "prereqs": ["k1-2-1"],
+      "task": "用 loop+break 实现「猜数字」直到猜中返回尝试次数；用 for 遍历 1..=10 求和；写嵌套循环用标签一次跳出两层。",
+      "refs": [
+        { "t": "The Rust Book 3.5 Control Flow · Loops", "u": "https://doc.rust-lang.org/book/ch03-05-control-flow.html#repetition-with-loops" }
+      ],
+      "quiz": [
+        { "q": "let result = loop { break 42; }; 中 result 的值是：", "opts": ["编译错误", "42，loop 的 break 可携带值", "()", "0"], "answer": 1, "why": "loop 是表达式，break expr 决定整个 loop 的值。" },
+        { "q": "0..5 与 0..=5 分别产生：", "opts": ["5 个与 6 个数", "6 个与 5 个数", "都 5 个", "都 6 个"], "answer": 0, "why": ".. 是左闭右开 [0,5)，..= 是闭区间 [0,5]。" }
+      ],
+      "tags": ["语法", "控制流"]
+    },
+    {
+      "id": "k1-2-3",
+      "title": "match 基础",
+      "difficulty": 1,
+      "minutes": 25,
+      "summary": "穷尽性的模式匹配：所有可能都必须覆盖，是 Rust 表达分支的主力。",
+      "outline": ["match expr { pat => 表达式, ... } 的语法", "穷尽性检查：漏分支编译失败，_ 兜底", "绑定值：模式可解构并命名", "match 也是表达式，各臂类型须一致"],
+      "prereqs": ["k1-2-1"],
+      "task": "写函数 coin_value(coin: Coin) -> u8 用 match 返回面值；新增一个枚举变体后重新编译，观察穷尽性报错并补分支。",
+      "refs": [
+        { "t": "The Rust Book 6.2 The match Control Flow Construct", "u": "https://doc.rust-lang.org/book/ch06-02-the-match-control-flow-construct.html" }
+      ],
+      "quiz": [
+        { "q": "match 分支少写一种枚举变体且没有 _，结果是：", "opts": ["运行时 panic", "编译错误：非穷尽模式", "警告但通过", "自动忽略"], "answer": 1, "why": "穷尽性是硬性检查，强制处理所有情况，防止漏分支。" }
+      ],
+      "tags": ["语法", "模式匹配"]
+    },
+    {
+      "id": "k1-3-1",
+      "title": "所有权三规则",
+      "difficulty": 2,
+      "minutes": 35,
+      "summary": "Rust 内存安全的根基：每个值有唯一所有者，离开作用域即释放，赋值/传参默认转移所有权。",
+      "outline": ["规则一：每个值都有一个所有者（owner）", "规则二：同一时刻只能有一个所有者", "规则三：所有者离开作用域，值被 drop", "对比：GC 语言（运行时回收）与 C（手动 free）", "栈与堆：为什么 String 需要所有权而 i32 不需要"],
+      "prereqs": ["k1-1-3"],
+      "task": "合上教程默写三规则；写程序在作用域 {} 前后打印变量观察生命周期，并运行 rustc --explain E0382 阅读官方对 move 错误的解释。",
+      "refs": [
+        { "t": "The Rust Book 4.1 What is Ownership?", "u": "https://doc.rust-lang.org/book/ch04-01-understanding-ownership.html" },
+        { "t": "Rustonomicon · 所有权与移动", "u": "https://doc.rust-lang.org/nomicon/moves.html" }
+      ],
+      "quiz": [
+        { "q": "所有权规则中「值离开作用域时发生什么」：", "opts": ["等待 GC 回收", "自动调用 drop，内存立即释放", "内存泄漏", "变为悬垂指针"], "answer": 1, "why": "编译器在作用域结束处插入 drop 调用，确定性地释放资源（RAII）。" },
+        { "q": "为什么 i32 赋值后原变量仍可用，String 却不行？", "opts": ["i32 更小", "i32 实现 Copy trait（栈上复制），String 只能 move", "String 有 bug", "i32 在堆上"], "answer": 1, "why": "Copy 类型按位复制无所有权问题；String 含堆指针，复制指针会造成双重释放，故 move。" }
+      ],
+      "detail_md": "content/rust/ownership.md",
+      "tags": ["所有权", "核心"]
+    },
+    {
+      "id": "k1-3-2",
+      "title": "Move 与 Copy 语义",
+      "difficulty": 2,
+      "minutes": 25,
+      "summary": "赋值与传参默认 move；实现 Copy 的类型按位复制。区分「移动后不可用」的编译期保证。",
+      "outline": ["move：堆数据的默认转移，原绑定失效", "Copy：i32/f64/bool/char/不可变引用等栈类型", "Clone：显式深拷贝 .clone()", "Drop 与 Copy 互斥：实现 Drop 的类型不能 Copy"],
+      "prereqs": ["k1-3-1"],
+      "task": "写三段代码：String 赋值后再用（E0382）、i32 赋值后再用（正常）、String 调 .clone() 后两者均可用；对比输出理解三者。",
+      "refs": [
+        { "t": "std::marker::Copy 文档", "u": "https://doc.rust-lang.org/std/marker/trait.Copy.html" }
+      ],
+      "quiz": [
+        { "q": "想让一个包装 i32 的自定义结构体赋值时自动复制而非移动，需要：", "opts": ["impl Clone", "derive Copy, Clone（且字段全为 Copy）", "impl Drop", "改为引用"], "answer": 1, "why": "Copy 要求所有字段都是 Copy；derive(Copy) 同时要求 Clone。" }
+      ],
+      "tags": ["所有权", "核心"]
+    },
+    {
+      "id": "k1-3-3",
+      "title": "借用与引用",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "& 创建引用「借用」值而不夺取所有权：读借用 &T，写借用 &mut T。",
+      "outline": ["引用 = 指针 + 借用检查约束", "&s 不可变借用：可读不可写", "函数签名 fn len(s: &String) —— 借用代替移动", "解引用 * 与自动解引用的常见场景", "引用默认不可变：与变量的 mut 是两件事"],
+      "prereqs": ["k1-3-1"],
+      "task": "实现 fn word_len(s: &String) -> usize 并调用后继续使用原变量；改成传 String 的版本，观察调用后原变量不可用的差异。",
+      "refs": [
+        { "t": "The Rust Book 4.2 References and Borrowing", "u": "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" }
+      ],
+      "quiz": [
+        { "q": "借用（引用）与移动的核心区别：", "opts": ["引用更快", "借用不转移所有权，函数结束后所有权仍在调用方", "借用会复制数据", "两者等价"], "answer": 1, "why": "借用只是临时访问权，是解决「传值后还要用」的标准手段。" }
+      ],
+      "detail_md": "content/rust/borrowing.md",
+      "tags": ["所有权", "借用"]
+    },
+    {
+      "id": "k1-3-4",
+      "title": "可变借用与借用检查器",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "独占规则：同一时刻要么多个 &T，要么一个 &mut T——数据竞争在编译期被消灭。",
+      "outline": ["&mut s 需要变量本身是 mut", "独占性：一个 &mut 与其他任何借用互斥", "作用域结束借用即释放（NLL：非词法作用域生命周期）", "为什么这样设计：防止迭代中修改、别名可变等隐患", "典型报错 E0502/E0499 的读法"],
+      "prereqs": ["k1-3-3"],
+      "task": "分别制造两类错误：对同一变量同时持有 & 与 &mut（E0502）、在 for 迭代 vec 时 push（E0502 变体），阅读报错并各给出一种修复。",
+      "refs": [
+        { "t": "错误索引 E0502", "u": "https://doc.rust-lang.org/error_codes/E0502.html" },
+        { "t": "The Rust Book · The Rules of References", "u": "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#the-rules-of-references" }
+      ],
+      "quiz": [
+        { "q": "以下哪个组合在同一时刻是合法的？", "opts": ["两个 &mut T", "一个 &T 加一个 &mut T", "多个 &T", "一个 &mut T 加一个 &T"], "answer": 2, "why": "不可变借用可以共存；只要出现可变借用就必须独占。" },
+        { "q": "借用检查器把「迭代中修改集合」判为错误的原因是：", "opts": ["性能问题", "迭代器持有的借用会因修改而失效，可能产生悬垂访问", "集合不支持修改", "编译器做不到"], "answer": 1, "why": "修改可能触发扩容/搬移，使迭代器中的引用悬垂；独占规则从源头杜绝。" }
+      ],
+      "tags": ["所有权", "借用"]
+    },
+    {
+      "id": "k1-3-5",
+      "title": "切片 slice",
+      "difficulty": 2,
+      "minutes": 25,
+      "summary": "&[T] 与 &str：对集合连续片段的借用视图，不持有数据。",
+      "outline": ["&s[0..5] 与 &s[..5]/&s[5..] 语法", "&str 本质是字符串切片", "数组切片 &[i32] 与 Vec 的关系", "函数参数用切片类型代替具体集合（更通用）", "越界访问会 panic"],
+      "prereqs": ["k1-3-3"],
+      "task": "实现 fn first_word(s: &str) -> &str 返回第一个单词；用 &String 和 &str 两种实参分别调用（deref 强转），验证都可运行。",
+      "refs": [
+        { "t": "The Rust Book 4.3 The Slice Type", "u": "https://doc.rust-lang.org/book/ch04-03-the-slice-type.html" }
+      ],
+      "quiz": [
+        { "q": "为什么函数参数推荐写 s: &str 而不是 s: &String？", "opts": ["&str 更快", "&str 更通用：String 可自动解引用强转为 &str，同时接受字面量", "两者相同", "&String 已废弃"], "answer": 1, "why": "借用最抽象的视图，调用方既可传 String 也可传 \"literal\"。" }
+      ],
+      "tags": ["所有权", "切片"]
+    },
+    {
+      "id": "k1-4-1",
+      "title": "结构体与方法实现",
+      "difficulty": 1,
+      "minutes": 30,
+      "summary": "struct 建模数据，impl 定义关联函数与方法，self 的三种形式。",
+      "outline": ["定义与初始化（字段初始化简写、结构体更新语法 ..）", "单元结构体与元组结构体", "impl 中：fn new() 关联函数 vs &self 方法", "self/&self/&mut self 的取舍", "derive(Debug) 打印结构体"],
+      "prereqs": ["k1-1-3"],
+      "task": "实现 Rectangle { w, f64 高 }，提供 new、area(&self)、scale(&mut self, f)，写 main 验证三个方法；用 .. 语法从旧矩形创建新矩形。",
+      "refs": [
+        { "t": "The Rust Book 5.1/5.3 Structs & Methods", "u": "https://doc.rust-lang.org/book/ch05-01-defining-structs.html" }
+      ],
+      "quiz": [
+        { "q": "impl 块中第一个参数是 Self（无 &）的方法意味着：", "opts": ["只读方法", "该方法会拿走值的所有权（如 into_bytes）", "静态方法", "非法写法"], "answer": 1, "why": "按值拿 self 即消耗值，调用后原值不可用；常见于转换类 API。" }
+      ],
+      "detail_md": "content/rust/structs.md",
+      "tags": ["语法", "结构体"]
+    },
+    {
+      "id": "k1-4-2",
+      "title": "枚举与 Option",
+      "difficulty": 1,
+      "minutes": 30,
+      "summary": "枚举的变体可携带数据；Option<T> 用类型表达「可能没有值」。",
+      "outline": ["枚举变体的三种形态：无数据/元组数据/结构体数据", "Option<T> = Some(T) | None 的定义", "与空指针的对比：None 必须被显式处理", "unwrap/expect 的适用场景与风险", "常用组合子：map、unwrap_or、and_then"],
+      "prereqs": ["k1-2-3"],
+      "task": "定义 Shape 枚举（圆/矩形各带数据），写 match 计算面积；用 Option 表示「查找用户」，分别用 unwrap_or 和 match 处理缺失情况。",
+      "refs": [
+        { "t": "The Rust Book 6.1 Defining an Enum", "u": "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html" },
+        { "t": "std::option 文档", "u": "https://doc.rust-lang.org/std/option/" }
+      ],
+      "quiz": [
+        { "q": "Option<T> 相比「返回 null」的根本优势：", "opts": ["性能更好", "可空性进入类型系统，编译器强制处理 None，不可能忘记判空", "写法更短", "可以存任意类型"], "answer": 1, "why": "T 与 Option<T> 是不同类型，把「忘记判空」从运行时事故变成编译错误。" },
+        { "q": "unwrap_or(default) 的行为是：", "opts": ["是 Some 返回值，是 None 返回 default", "总是 panic", "总是返回 default", "转为 Result"], "answer": 0, "why": "提供默认值的最常用组合子，比 match 更简洁。" }
+      ],
+      "detail_md": "content/rust/enums-option.md",
+      "tags": ["语法", "枚举"]
+    },
+    {
+      "id": "k1-4-3",
+      "title": "match 模式匹配详解",
+      "difficulty": 2,
+      "minutes": 35,
+      "summary": "字面量、区间、绑定、元组/结构体解构、守卫与 @ 绑定。",
+      "outline": ["模式种类：字面量、命名变量、_、..、区间、| 或", "解构元组/结构体/枚举嵌套", "匹配守卫 match ... if cond", "@ 绑定：1..=5 => n@1..=5", "穷尽性再次强化：新增变体的编译期保护"],
+      "prereqs": ["k1-2-3", "k1-4-2"],
+      "task": "写一个 match：解构 (x, y) 元组按象限分类；加守卫实现「x>0 且 y>0 才是第一象限」；用 @ 绑定区间并同时拿到具体值。",
+      "refs": [
+        { "t": "The Rust Book 6.3 / 18 章 Patterns", "u": "https://doc.rust-lang.org/book/ch06-03-if-let.html" },
+        { "t": "Reference · Patterns", "u": "https://doc.rust-lang.org/reference/patterns.html" }
+      ],
+      "quiz": [
+        { "q": "匹配守卫 if 的作用是：", "opts": ["改变穷尽性要求", "在模式匹配成功后追加布尔条件过滤", "代替 else", "只能用于数字"], "answer": 1, "why": "守卫在模式之上增加条件，表达「匹配且满足」的复合逻辑。" }
+      ],
+      "tags": ["语法", "模式匹配"]
+    },
+    {
+      "id": "k1-4-4",
+      "title": "if let 与 let else",
+      "difficulty": 1,
+      "minutes": 20,
+      "summary": "只关心一种模式时的简洁写法；let else 提前返回处理异常路径。",
+      "outline": ["if let Some(x) = opt { ... } else { ... }", "let Some(x) = opt else { return }; 的提前返回风格", "while let 消费型循环", "与 match 的取舍：单分支简洁 vs 穷尽完整"],
+      "prereqs": ["k1-4-2"],
+      "task": "用 if let 处理 Option<&str>；用 let else 把「参数缺失则提前 return」改写，对比两种写法的可读性并记录取舍。",
+      "refs": [
+        { "t": "The Rust Book 6.3 if let / let else", "u": "https://doc.rust-lang.org/book/ch06-03-if-let.html" }
+      ],
+      "quiz": [
+        { "q": "let else 中 else 块的要求是：", "opts": ["可以为空", "必须发散（return/panic/continue 等），否则编译错误", "必须打印日志", "只能 return ()"], "answer": 1, "why": "let else 语义是「匹配失败就走 else 且不能继续往下」，因此必须发散。" }
+      ],
+      "tags": ["语法", "模式匹配"]
+    },
+    {
+      "id": "k1-5-1",
+      "title": "Vec 动态数组",
+      "difficulty": 1,
+      "minutes": 30,
+      "summary": "最常用的集合：可增长数组，掌握增删改查与越界行为。",
+      "outline": ["创建：Vec::new()、vec![] 宏、with_capacity", "push/pop/insert/remove/get 的所有权语义", "索引 [] 与 .get() 的区别（panic vs Option）", "遍历三种方式与借用：&v / &mut v / v", "容量与扩容：capacity 与 len"],
+      "prereqs": ["k1-3-1"],
+      "task": "实现词频以外的练习：用 Vec 实现「待办列表」CLI（add/list/done/remove 三个命令循环），重点体验 .get 返回 Option 的处理。",
+      "refs": [
+        { "t": "The Rust Book 8.1 Storing Lists of Values with Vectors", "u": "https://doc.rust-lang.org/book/ch08-01-vectors.html" },
+        { "t": "std::vec::Vec 文档", "u": "https://doc.rust-lang.org/std/vec/struct.Vec.html" }
+      ],
+      "quiz": [
+        { "q": "v[100] 与 v.get(100)（v 长 3）的区别：", "opts": ["无区别", "前者 panic，后者返回 None", "前者返回 None", "后者 panic"], "answer": 1, "why": "索引运算符越界直接 panic；get 用 Option 表达可能缺失，由调用者处理。" },
+        { "q": "for x in &v 与 for x in v 的区别：", "opts": ["相同", "前者借用遍历后 v 仍可用，后者消耗 v", "后者更快", "前者不能读值"], "answer": 1, "why": "into_iter 拿走元素所有权，容器被消耗；借用迭代则保留容器。" }
+      ],
+      "detail_md": "content/rust/vec.md",
+      "tags": ["集合", "Vec"]
+    },
+    {
+      "id": "k1-5-2",
+      "title": "String 与 &str",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "UTF-8 编码的拥有型字符串 vs 借用切片；拼接、切片与字符/字节的双重性。",
+      "outline": ["String 内部 = Vec<u8> 的 UTF-8", "创建：from/to_string/push_str/format!", "s.chars() 与 s.bytes() 的区别", "切片 s[0..3] 按字节截取可能 panic（多字节字符边界）", "函数参数惯例 &str"],
+      "prereqs": ["k1-3-5", "k1-5-1"],
+      "task": "对 \"中文abc\" 分别打印 len()（字节数）、chars().count()（字符数），并对 0..2 切片观察 panic，解释原因。",
+      "refs": [
+        { "t": "The Rust Book 8.2 Storing UTF-8 Encoded Text with Strings", "u": "https://doc.rust-lang.org/book/ch08-02-strings.html" }
+      ],
+      "quiz": [
+        { "q": "\"中文\".len() 的返回值是：", "opts": ["2", "6（每个汉字 3 字节 UTF-8）", "4", "12"], "answer": 1, "why": "len() 返回字节数；字符数用 chars().count()。" }
+      ],
+      "detail_md": "content/rust/string-str.md",
+      "tags": ["集合", "字符串"]
+    },
+    {
+      "id": "k1-5-3",
+      "title": "HashMap",
+      "difficulty": 1,
+      "minutes": 30,
+      "summary": "键值映射：entry API、所有权规则与常用操作。",
+      "outline": ["创建与插入 insert(K, V)", "get 返回 Option<&V>；索引语法 []（缺 key 会 panic）", "entry().or_insert() 的「不存在则插入」惯用法", "key 必须 Eq+Hash；f32 不能作 key 的原因", "遍历顺序不确定：不要依赖"],
+      "prereqs": ["k1-5-1"],
+      "task": "实现词频统计：遍历一段英文，用 entry().or_insert(0) 累加计数并打印 Top3（配合 Vec 排序）。",
+      "refs": [
+        { "t": "The Rust Book 8.3 Storing Keys with Associated Values in Hash Maps", "u": "https://doc.rust-lang.org/book/ch08-03-hash-maps.html" }
+      ],
+      "quiz": [
+        { "q": "entry(k).or_insert(0) 返回的是：", "opts": ["Option<&mut V>", "&mut V（存在返回其引用，不存在插入默认值后返回引用）", "V 的拷贝", "bool 表示是否插入"], "answer": 1, "why": "entry API 一次完成查找+插入+可变访问，是计数器/分桶的标准写法。" }
+      ],
+      "tags": ["集合", "HashMap"]
+    },
+    {
+      "id": "k1-5-4",
+      "title": "集合与所有权",
+      "difficulty": 2,
+      "minutes": 25,
+      "summary": "集合操作中的所有权细节：move 进容器、借用迭代、消耗性操作。",
+      "outline": ["v.push(s) 后 s 被移动", "迭代三种形式对应的所有权：iter/iter_mut/into_iter", "collect::<Vec<_>>() 与 turbofish", "drain/retain 等批量操作的语义", "常见错误：迭代中修改容器"],
+      "prereqs": ["k1-5-1", "k1-3-4"],
+      "task": "写代码演示 push(String) 后原变量不可用；用 iter() 修改元素需 iter_mut() 的编译差异；把 map 的结果 collect 成 Vec 和 HashMap 各一次。",
+      "refs": [
+        { "t": "std::iter::IntoIterator", "u": "https://doc.rust-lang.org/std/iter/trait.IntoIterator.html" }
+      ],
+      "quiz": [
+        { "q": "想把迭代器结果收集成 HashMap，正确写法是：", "opts": [".collect::<HashMap<_, _>>()", ".hashmap()", ".to_hashmap()", "必须手动循环"], "answer": 0, "why": "collect 支持 turbofish 或类型标注指定目标集合，(K,V) 序列可直接收集。" }
+      ],
+      "tags": ["集合", "所有权"]
+    },
+    {
+      "id": "k1-6-1",
+      "title": "panic! 与不可恢复错误",
+      "difficulty": 1,
+      "minutes": 20,
+      "summary": "panic = 程序无法继续的 bug 信号：展开或中止，以及何时应该 panic。",
+      "outline": ["panic! 的行为：栈展开（默认）与 abort", "RUST_BACKTRACE=1 定位 panic 位置", "应该 panic 的场景：违反约定/不变量被破坏（如断言）", "assert!/assert_eq!/unreachable!/todo! 的定位", "库代码慎用 panic：把选择权交给调用者"],
+      "prereqs": ["k1-1-4"],
+      "task": "写代码触发 panic，用 RUST_BACKTRACE=1 cargo run 查看回溯；用 assert_eq! 写一个失败的断言并阅读输出。",
+      "refs": [
+        { "t": "The Rust Book 9.1 Unrecoverable Errors with panic!", "u": "https://doc.rust-lang.org/book/ch09-01-unrecoverable-errors-with-panic.html" }
+      ],
+      "quiz": [
+        { "q": "库函数遇到「调用者传入了违反文档约定的参数」，惯用处理是：", "opts": ["静默返回默认值", "返回 Result（或断言参数）而不是隐藏问题", "直接 exit", "打印后继续"], "answer": 1, "why": "可预期的失败用 Result；断言用于不可恢复的约定破坏。" }
+      ],
+      "tags": ["错误处理"]
+    },
+    {
+      "id": "k1-6-2",
+      "title": "Result 与可恢复错误",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "Result<T, E> 把失败编码进类型：match 处理两种分支，库与 CLI 的不同策略。",
+      "outline": ["Result<T, E> = Ok(T) | Err(E)", "match File::open 的完整处理", "unwrap/expect：快速原型 vs 明确放弃恢复", "常用组合子：map/unwrap_or/ok()/err()", "main 也可以返回 Result"],
+      "prereqs": ["k1-4-2"],
+      "task": "读一个不存在的文件：分别用 match、unwrap_or_default、?（下一知识点）三种方式处理，观察行为差异并记录适用场景。",
+      "refs": [
+        { "t": "The Rust Book 9.2 Recoverable Errors with Result", "u": "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html" }
+      ],
+      "quiz": [
+        { "q": "expect(\"msg\") 相比 unwrap 的改进是：", "opts": ["不会 panic", "panic 时携带自定义信息，说明为什么此失败应不可能", "返回 None", "自动重试"], "answer": 1, "why": "expect 强制写明理由，提升崩溃时的可诊断性。" }
+      ],
+      "detail_md": "content/rust/result.md",
+      "tags": ["错误处理"]
+    },
+    {
+      "id": "k1-6-3",
+      "title": "? 运算符",
+      "difficulty": 2,
+      "minutes": 25,
+      "summary": "错误传播的语法糖：Ok 解包继续，Err 经 From 转换后提前返回。",
+      "outline": ["等价展开：match expr { Ok(v) => v, Err(e) => return Err(From::from(e)) }", "From 自动转换：错误类型之间的桥", "只能在返回 Result/Option 的函数中使用", "链式传播：? 让主路径保持清晰", "main 返回 Box<dyn Error> 让 ? 通吃"],
+      "prereqs": ["k1-6-2"],
+      "task": "写 read_username() -> Result<String, io::Error>：读文件再 trim，全程用 ?；把错误类型改为统一枚举并实现 From，验证 ? 的自动转换。",
+      "refs": [
+        { "t": "std::ops::Try（? 语义）· The Book 9.2 尾节", "u": "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#a-shortcut-for-propagating-errors-the--operator" }
+      ],
+      "quiz": [
+        { "q": "? 在 Err(e) 时会：", "opts": ["忽略错误继续执行", "将 e 经 From::from 转换为函数错误类型并立即返回", "panic", "打印错误"], "answer": 1, "why": "From 转换让子模块错误自动上卷为统一错误类型。" }
+      ],
+      "detail_md": "content/rust/question-operator.md",
+      "tags": ["错误处理"]
+    },
+    {
+      "id": "k1-6-4",
+      "title": "自定义错误类型入门",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "用枚举定义错误集合并实现 Display/From：为库打造可编程处理的错误。",
+      "outline": ["定义 AppError 枚举列举失败种类", "impl Display + std::error::Error", "impl From<io::Error> 让 ? 自动转换", "thiserror 派生的预览（进阶章节展开）", "错误里该放什么：上下文、原因、可操作建议"],
+      "prereqs": ["k1-6-3"],
+      "task": "定义 ConfigError 枚举（文件缺失/格式错误两变体），手写 Display 与 From<io::Error>，在 main 中用 match 区分处理并打印友好信息。",
+      "refs": [
+        { "t": "std::error::Error 文档", "u": "https://doc.rust-lang.org/std/error/trait.Error.html" },
+        { "t": "blog::Error Handling · Nick Babcock（模式参考）", "u": "https://nickb.dev/blog/default-error-idiom-in-rust-libraries/" }
+      ],
+      "quiz": [
+        { "q": "实现 From<io::Error> for AppError 后，函数内 file? 的行为：", "opts": ["编译错误", "io::Error 自动转成 AppError 后随 ? 返回", "panic", "需要手动 match"], "answer": 1, "why": "? 的 From 转换正是为「统一错误类型」设计的。" }
+      ],
+      "tags": ["错误处理"]
+    }
+  ]
+}

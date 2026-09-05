@@ -1,0 +1,38 @@
+{
+  "kps": [
+    {
+      "id": "kx-1-1",
+      "title": "正则表达式基础",
+      "difficulty": 2,
+      "minutes": 35,
+      "summary": "声明式文本匹配语言：字符类、量词、分组与常用引擎差异。",
+      "outline": ["字面量与元字符 . * + ? [] () | ^ $", "量词与贪婪/非贪婪（*?）", "分组捕获与反向引用 \\1", "锚点与 lookahead 概览", "regex crate 支持的语法范围（不支持回溯）"],
+      "prereqs": ["k1-5-2", "k8-2-2"],
+      "task": "用 Rust regex crate 写三个匹配：邮箱粗匹配、日期 YYYY-MM-DD 提取（含捕获组）、日志行解析；对每个写一个通过的单测。",
+      "refs": [
+        { "t": "regex crate 文档 · 语法总览", "u": "https://docs.rs/regex/latest/regex/#syntax" }
+      ],
+      "quiz": [
+        { "q": "正则 a.*?b 中的 *? 表示：", "opts": ["可选的 *", "非贪婪匹配：尽可能少地消耗字符", "乘号", "转义"], "answer": 1, "why": "默认量词贪婪；后缀 ? 切换为惰性匹配。" }
+      ],
+      "tags": ["扩展", "文本"]
+    },
+    {
+      "id": "kx-1-2",
+      "title": "HTTP 客户端 reqwest",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "Rust 生态标准 HTTP 客户端：异步请求、JSON、超时与错误处理。",
+      "outline": ["blocking 与 async 客户端的选择", "get/post + .json(&body) + 超时配置", "错误链与状态码检查 error_for_status", "header 与鉴权注入", "重试与限流概览"],
+      "prereqs": ["k7-2-1", "k2-5-3", "k1-6-3"],
+      "task": "用 reqwest 异步客户端请求 httpbin.org/json，反序列化为 serde 类型并打印；加上 5 秒超时与 error_for_status 错误处理。",
+      "refs": [
+        { "t": "reqwest 文档", "u": "https://docs.rs/reqwest/latest/reqwest/" }
+      ],
+      "quiz": [
+        { "q": "reqwest 默认（开启 TLS feature）的响应体读取是：", "opts": ["同步阻塞", "异步流，需 .await 获取/消费", "自动落盘", "仅字符串"], "answer": 1, "why": "async 客户端返回 Future，body 以流方式异步读取。" }
+      ],
+      "tags": ["扩展", "网络"]
+    }
+  ]
+}
