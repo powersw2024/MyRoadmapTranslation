@@ -1,0 +1,64 @@
+{
+  "kps": [
+    {
+      "id": "cn-243ut3ja",
+      "title": "剑指 Offer 6：从尾到头打印链表",
+      "difficulty": 1,
+      "minutes": 20,
+      "summary": "逆序打印链表：递归（后序回溯）或迭代头插法；Rust 的 Option<Box<ListNode>> 演示安全的链表表达。",
+      "outline": [
+        "题目：从尾到头反过来打印链表每个结点的值（1→2→3 打印 3,2,1）",
+        "递归思路：先递归打印「后面的子链」，再打印当前节点——天然逆序；链表过长时递归栈会溢出（Python 默认约 1000 层）",
+        "迭代头插法：遍历原链表把每个节点插入新链表头部（Java 实现）；等价的数组技巧是顺序收集后 reverse",
+        "Python 实现（已验证输出 [3,2,1] / [3,2,1] / []）：dataclass 定义节点 + 递归、迭代两版对照",
+        "Rust 实现（已验证输出 [3, 2, 1] / []）：`Option<Box<ListNode>>` 表达链——Box 固定大小解决递归类型问题，Option 消空指针；`as_deref()` 顺链遍历",
+        "双语言洞察：Java/Python 随手 new 的链表节点，在 Rust 里需要理解 Box（堆分配）与所有权的归属——这正是链表在 Rust 中「难写」的根源，也是学所有权最好的练习",
+        "复杂度：两种方法都是 O(N) 时间；递归额外 O(N) 栈空间，迭代头插 O(N) 新链空间"
+      ],
+      "prereqs": [],
+      "task": "用 Python 与 Rust 分别实现 1→2→3→4 的逆序打印（两版输出 [4,3,2,1] 一致）；再把 Python 递归版放到 2000 个节点的链表上运行，用 sys.setrecursionlimit 或改写迭代版解决 RecursionError——记录两种处理方式即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CS-Notes-master/notes/6. 从尾到头打印链表.md",
+          "u": "https://github.com/CyC2018/CS-Notes/blob/master/notes/6.%20%E4%BB%8E%E5%B0%BE%E5%88%B0%E5%A4%B4%E6%89%93%E5%8D%B0%E9%93%BE%E8%A1%A8.md"
+        },
+        {
+          "t": "牛客网：从尾到头打印链表（在线判题）",
+          "u": "https://www.nowcoder.com/practice/d0267f7f55b3412ba93bd35cfa8e8035?tpId=13&tqId=11156"
+        },
+        {
+          "t": "Rust 官方文档：使用 Box 的递归类型（Cons List）",
+          "u": "https://doc.rust-lang.org/book/ch15-01-box.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "递归打印为什么天然就是逆序？",
+          "opts": [
+            "因为递归会自动排序",
+            "因为打印动作发生在递归调用「回来之后」（后序位置），链尾的节点最先被执行打印",
+            "因为链表本身是逆序存储的",
+            "因为用了栈数据结构"
+          ],
+          "answer": 1,
+          "why": "递归先下探到链尾，回溯时才执行各层的打印语句——最深（最靠后）的节点最先打印，这就是后序遍历的位置语义。"
+        },
+        {
+          "kind": "choice",
+          "q": "Rust 里定义链表节点 `next` 字段为什么必须用 Option<Box<ListNode>>？",
+          "opts": [
+            "Option 让代码更好看",
+            "链表长度不定、类型大小必须编译期确定：Box 把递归类型放到堆上固定大小，Option 表达「没有下一个」",
+            "Box 会自动加锁",
+            "这是牛客网接口要求"
+          ],
+          "answer": 1,
+          "why": "递归类型直接内嵌自身大小无穷大，编译器拒绝；Box 提供固定大小的指针并分配在堆上，Option 安全表达空指针语义。"
+        }
+      ],
+      "domain": "算法",
+      "tags": ["链表", "递归", "剑指Offer"],
+      "author": "powersw2024"
+    }
+  ]
+}
