@@ -1,0 +1,57 @@
+{
+  "kps": [
+    {
+      "id": "sg-463gc2t7",
+      "title": "Duke C 编程专项：指针与内存模型强化",
+      "difficulty": 2,
+      "minutes": 600,
+      "summary": "Duke 的 Coursera C 入门专项课：把 frame/stack/heap 与指针讲透，并训练 GDB、Valgrind 调试基本功，兼顾广度和深度。",
+      "outline": [
+        "课程定位：Coursera 专项课（4 门），侧重基础概念——栈帧 frame、stack memory、heap memory 讲得很透",
+        "指针强化：针对 C 最难的指针设计了系统的练习与编程题（Rust 学习者可对照理解：引用/借用是「有编译器保护的指针」）",
+        "工具训练：GDB 与 Valgrind 上手，作业包含基本 Git 练习；老师建议 Emacs（Vim 用户可用 Evil 插件兼顾两者）",
+        "Rust 对照示例（已验证输出 score=95/100、heap len=3）：`fn main(){ let mut score=95; let r=&score; score+=5; let heap=vec![1,2,3]; println!(\"{r} {} {score}\", heap.len()); }` —— 不可变借用 ≈ `const int *p`，而 Rust 的所有权检查让 Valgrind 才能发现的错误在编译期暴露",
+        "Python 对照：CPython 对象模型中变量是「名字绑定对象」，id() 与引用计数可帮助理解 heap 概念（`a=[1,2]; b=a; b.append(3)` 后 a 也变——同一对象两个名字）",
+        "付费说明：Coursera 专项课可能需要付费旁听/证书，但课程价值被原作者评价为「值」"
+      ],
+      "prereqs": ["sg-21bwmqda"],
+      "task": "完成专项课第 1 门课程中任一周的指针编程作业；同时用 Rust 写一个演示函数接收 `&Vec<i32>` 只读统计、再接收 `&mut Vec<i32>` 追加元素的小程序（rustc 编译运行通过即验证了「读借用与写借用」的差异），把运行输出与作业提交截图记入笔记。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/编程入门/C/Duke-Coursera-Intro-C.md",
+          "u": "https://www.coursera.org/specializations/c-programming"
+        },
+        {
+          "t": "Duke Introductory C Programming Specialization（Coursera 官方页面）",
+          "u": "https://www.coursera.org/specializations/c-programming"
+        },
+        {
+          "t": "The Rust Book：理解所有权（与 C 指针对照）",
+          "u": "https://doc.rust-lang.org/book/ch04-01-understanding-ownership.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "按原作者的评价，Duke 这门专项课最突出的教学重点是？",
+          "opts": [
+            "Web 前端框架的使用",
+            "栈/堆内存模型与指针的系统训练，并配合 GDB、Valgrind 工具",
+            "纯理论离散数学证明",
+            "机器学习入门"
+          ],
+          "answer": 1,
+          "why": "课程侧重 frame、stack memory、heap memory 等基础概念，对 C 最难的指针有专门练习，同时训练 GDB/Valgrind 调试基本功。"
+        },
+        {
+          "kind": "blank",
+          "q": "Rust 中 `&T` 是不可变借用，语义上接近 C 语言的 `const T *`（指向常量的指针）；而对堆数据，C 用 malloc/free 手工管理，Rust 用 __ 系统在编译期自动决定释放时机。",
+          "accept": ["所有权", "ownership"],
+          "why": "Rust 的所有权（ownership）系统在编译期确定值的释放点，取代 C 的手工内存管理，避免泄漏与悬垂指针。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["C语言", "指针", "内存管理", "课程导航"],
+      "author": "powersw2024"
+    }
+  ]
+}
