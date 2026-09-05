@@ -1,0 +1,62 @@
+{
+  "kps": [
+    {
+      "id": "sg-oxa9tin5",
+      "title": "伯克利 CS61A：程序构造的抽象与解释器",
+      "difficulty": 2,
+      "minutes": 600,
+      "summary": "伯克利 CS61 系列首课：以 Python 为主语言讲透函数抽象、数据抽象与解释器，期末用 Python 实现 Scheme 解释器。",
+      "outline": [
+        "课程定位：强调抽象——用程序解决实际问题而不纠缠硬件细节；同时掌握 Python、Scheme、SQL 三种语言并比较异同",
+        "CS61 系列全景：61A 抽象 → 61B 算法与数据结构/大型项目 → 61C 体系结构（RISC-V、Logisim 实现 CPU）",
+        "核心主题：函数式编程（高阶函数、lambda）、数据抽象、面向对象、树递归",
+        "标志项目：第 4 个 Project 用 Python 实现一个 Scheme 解释器（学 Rust 者可对照 anteroyer/rust-scheme 等练习用 Rust 重写 eval/apply 循环）",
+        "高阶函数双语言示例（已验证两版输出均为 17 / [11,12,13] / 20）：Python `add10=make_adder(10)` 与 Rust `fn make_adder(n:i32)->impl Fn(i32)->i32{ move |x| x+n }`",
+        "零基础提示：完全没有编程基础时建议先学 CS50 或 CS10，避免难度挫伤",
+        "课程资源：inst.eecs.berkeley.edu 各学期站点、教材《Composing Programs》官网及中文翻译、B 站课程视频"
+      ],
+      "prereqs": ["sg-1pgx3xch"],
+      "task": "打开 CS61A 最新学期网站，完成 Lab 00（环境搭建）与 HW 01 中任意 3 道高阶函数题；然后把课程版的 make_adder 分别用 Python 与 Rust 实现并通过相同断言（add10(7)==17）——两个程序输出一致即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/编程入门/Python/CS61A.md",
+          "u": "https://inst.eecs.berkeley.edu/~cs61a/sp24"
+        },
+        {
+          "t": "CS61A 课程网站（Spring 2024）",
+          "u": "https://inst.eecs.berkeley.edu/~cs61a/sp24"
+        },
+        {
+          "t": "课程教材 Composing Programs（SICP 的 Python 版，有中文翻译）",
+          "u": "https://www.composingprograms.com/"
+        },
+        {
+          "t": "The Rust Book：闭包（与课程高阶函数对照）",
+          "u": "https://doc.rust-lang.org/book/ch13-01-closures.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "CS61A 期末标志 Project 的内容是什么？",
+          "opts": [
+            "用 Java 写一个安卓应用",
+            "用 Python 实现一个 Scheme 解释器",
+            "训练一个神经网络",
+            "实现一个 RISC-V CPU"
+          ],
+          "answer": 1,
+          "why": "课程第 4 个 Project 用 Python 实现 Scheme 解释器，把「语言即数据、eval/apply 循环」的抽象观落到实处；实现 CPU 属于 CS61C。"
+        },
+        {
+          "kind": "subjective",
+          "prompt": "用 make_adder 说明「高阶函数」在 Python 与 Rust 中的表达差异（返回值、捕获方式）。",
+          "reference": "1) Python：def make_adder(n): return lambda x: x+n —— 闭包捕获变量 n，语法轻量；\n2) Rust：fn make_adder(n: i32) -> impl Fn(i32) -> i32 { move |x| x+n } —— 需要显式声明返回的闭包类型 impl Fn，move 把 n 的所有权移入闭包；\n3) 共同点：函数/闭包都是可以返回和传递的一等值；差异主要在类型系统的显式程度与所有权语义。",
+          "why": "考察对课程核心主题（函数抽象）的双语言迁移理解。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["Python", "抽象", "解释器", "函数式"],
+      "author": "powersw2024"
+    }
+  ]
+}
