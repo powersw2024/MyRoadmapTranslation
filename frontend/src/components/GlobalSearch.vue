@@ -43,6 +43,19 @@ function pick(k) {
   go('/kp/' + k.id)
 }
 
+// 命中片段高亮
+function hlTitle(title) {
+  const query = q.value.trim()
+  if (!query) return title
+  const i = title.toLowerCase().indexOf(query.toLowerCase())
+  if (i < 0) return title
+  return (
+    title.slice(0, i) +
+    '<mark>' + title.slice(i, i + query.length) + '</mark>' +
+    title.slice(i + query.length)
+  )
+}
+
 function onKey(e) {
   if (e.key === 'ArrowDown') {
     activeIdx.value = Math.min(activeIdx.value + 1, results.value.length - 1)
@@ -76,7 +89,7 @@ function onKey(e) {
         @click="pick(k)"
       >
         <span class="dot" style="background: var(--accent)" />
-        <span>{{ k.title }}</span>
+        <span v-html="hlTitle(k.title)" />
         <span class="t-caption c-faint" style="margin-left: auto">{{ k.moduleName }}</span>
       </div>
     </div>

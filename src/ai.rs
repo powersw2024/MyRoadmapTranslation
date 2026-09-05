@@ -131,22 +131,20 @@ fn parse_review(text: &str) -> AiReview {
     }
 }
 
-/// 调用 AI 后端评价代码。60s 超时。
-pub async fn review(
+/// 统一的补全调用：所有出站 AI 请求都经由本函数。返回模型文本。
+/// 错误信息不携带请求目标（不把 URL 回显给调用方）。
+async fn completion_text(
     cfg: &AiConfig,
-    kp_title: &str,
-    task: &str,
-    code: &str,
-) -> Result<AiReview, String> {
-    let prompt = build_prompt(kp_title, task, code);
+    system: Option<&str>,
+    prompt: &str,
+    json_mode: bool,
+) -> Result<String, String> {
     let client = guarded_client(&cfg.base_url, Duration::from_secs(60)).await?;
-    let text = match cfg.backend.as_str() {
+    match cfg.backend.as_str() {
         "ollama" => {
-            let url = endpoint(&cfg.base_url, "api/chat")?;
-            let body = json_body_ollama(&cfg.model, &prompt);
             let resp: OllamaResp = client
-                .post(url)
-                .json(&body)
+                .post(endpoint(&cfg.base_url, "api/chat")?)
+                .json(&json_body_ollama(&cfg.model, system, prompt, json_mode))
                 .send()
                 .await
                 .map_err(|e| format!("请求 Ollama 失败: {e}"))?
@@ -155,13 +153,12 @@ pub async fn review(
                 .json()
                 .await
                 .map_err(|e| format!("解析 Ollama 响应失败: {e}"))?;
-            resp.message.content
+            Ok(resp.message.content)
         }
         _ => {
-            let url = endpoint(&cfg.base_url, "chat/completions")?;
             let mut req = client
-                .post(url)
-                .json(&json_body_openai(&cfg.model, &prompt));
+                .post(endpoint(&cfg.base_url, "chat/completions")?)
+                .json(&json_body_openai(&cfg.model, system, prompt, json_mode));
             if let Some(key) = &cfg.api_key {
                 req = req.bearer_auth(key);
             }
@@ -178,9 +175,26 @@ pub async fn review(
                 .into_iter()
                 .next()
                 .map(|c| c.message.content)
-                .ok_or_else(|| "AI 响应无内容".to_string())?
+                .ok_or_else(|| "AI 响应无内容".to_string())
         }
-    };
+    }
+}
+
+/// 调用 AI 后端评价代码。60s 超时。
+pub async fn review(
+    cfg: &AiConfig,
+    kp_title: &str,
+    task: &str,
+    code: &str,
+) -> Result<AiReview, String> {
+    let prompt = build_prompt(kp_title, task, code);
+    let text = completion_text(
+        cfg,
+        Some("你是严格的 Rust 代码评审，只输出 JSON。"),
+        &prompt,
+        true,
+    )
+    .await?;
     Ok(parse_review(&text))
 }
 
@@ -198,60 +212,13 @@ pub async fn grade_answer(
          {{\"score\": 0-100 整数（≥60 为通过）, \"summary\": \"一句话评语\", \
          \"suggestions\": [\"遗漏或需补充的要点\", ...]}}"
     );
-    let client = guarded_client(&cfg.base_url, Duration::from_secs(60)).await?;
-    let text = match cfg.backend.as_str() {
-        "ollama" => {
-            let resp: OllamaResp = client
-                .post(endpoint(&cfg.base_url, "api/chat")?)
-                .json(&serde_json::json!({
-                    "model": cfg.model,
-                    "stream": false,
-                    "format": "json",
-                    "messages": [
-                        {"role": "system", "content": "你是严格的阅卷老师，只输出 JSON。"},
-                        {"role": "user", "content": prompt}
-                    ]
-                }))
-                .send()
-                .await
-                .map_err(|e| format!("请求 Ollama 失败: {e}"))?
-                .error_for_status()
-                .map_err(|e| format!("Ollama 返回错误: {e}"))?
-                .json()
-                .await
-                .map_err(|e| format!("解析 Ollama 响应失败: {e}"))?;
-            resp.message.content
-        }
-        _ => {
-            let mut req = client
-                .post(endpoint(&cfg.base_url, "chat/completions")?)
-                .json(&serde_json::json!({
-                    "model": cfg.model,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": "你是严格的阅卷老师，只输出 JSON。"},
-                        {"role": "user", "content": prompt}
-                    ]
-                }));
-            if let Some(key) = &cfg.api_key {
-                req = req.bearer_auth(key);
-            }
-            let resp: OpenAiResp = req
-                .send()
-                .await
-                .map_err(|e| format!("请求 AI API 失败: {e}"))?
-                .error_for_status()
-                .map_err(|e| format!("AI API 返回错误: {e}"))?
-                .json()
-                .await
-                .map_err(|e| format!("解析 AI 响应失败: {e}"))?;
-            resp.choices
-                .into_iter()
-                .next()
-                .map(|c| c.message.content)
-                .ok_or_else(|| "AI 响应无内容".to_string())?
-        }
-    };
+    let text = completion_text(
+        cfg,
+        Some("你是严格的阅卷老师，只输出 JSON。"),
+        &prompt,
+        true,
+    )
+    .await?;
     Ok(parse_review(&text))
 }
 
@@ -365,7 +332,10 @@ async fn ssrf_vetted_addrs(base_url: &str) -> Result<Vec<std::net::SocketAddr>, 
 
 /// URL 端口：显式端口优先，否则按 scheme 默认（http=80 / https=443）。
 fn url_port(base_url: &str) -> u16 {
-    let rest = base_url.split_once("://").map(|(_, r)| r).unwrap_or(base_url);
+    let rest = base_url
+        .split_once("://")
+        .map(|(_, r)| r)
+        .unwrap_or(base_url);
     let host_port = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     match host_port.rsplit_once(':') {
         Some((_, port)) if !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) => {
@@ -399,8 +369,7 @@ async fn guarded_client(base_url: &str, timeout: Duration) -> Result<reqwest::Cl
 /// 构造 API 端点：`Url::parse` + `join`，请求目标永远是解析过的 `Url` 类型，
 /// 不做字符串拼接（base_url 是否含 `/v1` 等路径段均语义正确）。
 fn endpoint(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
-    let mut base =
-        reqwest::Url::parse(base_url).map_err(|e| format!("base_url 非法: {e}"))?;
+    let mut base = reqwest::Url::parse(base_url).map_err(|e| format!("base_url 非法: {e}"))?;
     let trimmed = base.path().trim_end_matches('/').to_string();
     base.set_path(&if trimmed.is_empty() {
         "/".to_string()
@@ -410,78 +379,49 @@ fn endpoint(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
     base.join(path).map_err(|e| format!("接口路径非法: {e}"))
 }
 
-/// 后端探针：发送一次最小补全请求，返回耗时（毫秒）。20s 超时。
-/// 配置只来自服务端环境变量（`AiConfig::from_env`），地址不可被请求注入。
-pub async fn probe_backend(cfg: &AiConfig) -> Result<u128, String> {
-    let client = guarded_client(&cfg.base_url, Duration::from_secs(20)).await?;
+/// 最小补全测速：发送一次最小补全请求，返回耗时（毫秒）。
+/// 复用 `completion_text`（与 review 相同的出站通道），本函数不含任何请求构造。
+pub async fn first_completion_latency(cfg: &AiConfig) -> Result<u128, String> {
     let started = std::time::Instant::now();
-    match cfg.backend.as_str() {
-        "ollama" => {
-            let url = endpoint(&cfg.base_url, "api/chat")?;
-            let body = serde_json::json!({
-                "model": cfg.model,
-                "stream": false,
-                "messages": [{"role": "user", "content": "回复 ok"}]
-            });
-            let resp: OllamaResp = client
-                .post(url)
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| format!("无法连接 Ollama（{}）: {e}", cfg.base_url))?
-                .error_for_status()
-                .map_err(|e| format!("Ollama 返回错误: {e}"))?
-                .json()
-                .await
-                .map_err(|e| format!("解析响应失败: {e}"))?;
-            let _ = resp.message.content;
-        }
-        _ => {
-            let url = endpoint(&cfg.base_url, "chat/completions")?;
-            let mut req = client.post(url).json(&serde_json::json!({
-                "model": cfg.model,
-                "max_tokens": 5,
-                "messages": [{"role": "user", "content": "ok"}]
-            }));
-            if let Some(key) = &cfg.api_key {
-                req = req.bearer_auth(key);
-            }
-            let resp: OpenAiResp = req
-                .send()
-                .await
-                .map_err(|e| format!("无法连接 AI API（{}）: {e}", cfg.base_url))?
-                .error_for_status()
-                .map_err(|e| format!("AI API 返回错误: {e}"))?
-                .json()
-                .await
-                .map_err(|e| format!("解析响应失败: {e}"))?;
-            let _ = resp.choices;
-        }
-    }
+    let text = completion_text(cfg, None, "回复 ok", false).await?;
+    let _ = text.chars().count();
     Ok(started.elapsed().as_millis())
 }
 
-fn json_body_ollama(model: &str, prompt: &str) -> serde_json::Value {
-    serde_json::json!({
-        "model": model,
-        "stream": false,
-        "format": "json",
-        "messages": [
-            {"role": "system", "content": "你是严格的 Rust 代码评审，只输出 JSON。"},
-            {"role": "user", "content": prompt}
-        ]
-    })
+fn json_body_ollama(
+    model: &str,
+    system: Option<&str>,
+    prompt: &str,
+    json_mode: bool,
+) -> serde_json::Value {
+    let mut messages = Vec::new();
+    if let Some(s) = system {
+        messages.push(serde_json::json!({"role": "system", "content": s}));
+    }
+    messages.push(serde_json::json!({"role": "user", "content": prompt}));
+    let mut body = serde_json::json!({ "model": model, "stream": false, "messages": messages });
+    if json_mode {
+        body["format"] = serde_json::json!("json");
+    }
+    body
 }
 
-fn json_body_openai(model: &str, prompt: &str) -> serde_json::Value {
-    serde_json::json!({
-        "model": model,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": "你是严格的 Rust 代码评审，只输出 JSON。"},
-            {"role": "user", "content": prompt}
-        ]
-    })
+fn json_body_openai(
+    model: &str,
+    system: Option<&str>,
+    prompt: &str,
+    json_mode: bool,
+) -> serde_json::Value {
+    let mut messages = Vec::new();
+    if let Some(s) = system {
+        messages.push(serde_json::json!({"role": "system", "content": s}));
+    }
+    messages.push(serde_json::json!({"role": "user", "content": prompt}));
+    let mut body = serde_json::json!({ "model": model, "messages": messages });
+    if json_mode {
+        body["response_format"] = serde_json::json!({"type": "json_object"});
+    }
+    body
 }
 
 #[cfg(test)]

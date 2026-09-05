@@ -1,7 +1,21 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { useManifest, useProgress, go } from '../composables/store'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useManifest, useProgress, setLastKp, go } from '../composables/store'
 import QuizWidget from '../components/QuizWidget.vue'
+import hljs from 'highlight.js/lib/core'
+import rust from 'highlight.js/lib/languages/rust'
+import python from 'highlight.js/lib/languages/python'
+import javascript from 'highlight.js/lib/languages/javascript'
+import bash from 'highlight.js/lib/languages/bash'
+import json from 'highlight.js/lib/languages/json'
+import sql from 'highlight.js/lib/languages/sql'
+
+hljs.registerLanguage('rust', rust)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('sql', sql)
 
 const props = defineProps({ id: { type: String, required: true } })
 const { manifest, kpIndex } = useManifest()
@@ -10,6 +24,9 @@ const { progress, markRead, setMastered, setQuizBest } = useProgress()
 const kp = ref(null)
 const kpError = ref('')
 const loading = ref(true)
+const bodyEl = ref(null)
+const toc = ref([])
+const activeH = ref('')
 
 async function fetchKp(id) {
   loading.value = true
@@ -20,12 +37,70 @@ async function fetchKp(id) {
     if (!res.ok) throw new Error(res.status === 404 ? '知识点不存在或已被移动' : `服务异常（HTTP ${res.status}）`)
     kp.value = await res.json()
     markRead(id)
+    if (kp.value.title) setLastKp(id, kp.value.title)
+    await nextTick()
+    enhanceBody()
   } catch (e) {
     kpError.value = String(e.message || e)
   }
   loading.value = false
 }
 watch(() => props.id, fetchKp, { immediate: true })
+
+/** 正文增强：语法高亮 / 复制按钮 / 提取 h2-h3 生成目录 */
+function enhanceBody() {
+  const el = bodyEl.value
+  if (!el) return
+  el.querySelectorAll('pre code').forEach(block => {
+    if (!block.dataset.hl) {
+      hljs.highlightElement(block)
+      block.dataset.hl = '1'
+    }
+    const pre = block.parentElement
+    if (pre && !pre.querySelector('.copy-btn')) {
+      const btn = document.createElement('button')
+      btn.className = 'copy-btn'
+      btn.textContent = '复制'
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(block.textContent)
+          btn.textContent = '已复制 ✓'
+          btn.classList.add('copied')
+          setTimeout(() => {
+            btn.textContent = '复制'
+            btn.classList.remove('copied')
+          }, 1500)
+        } catch {
+          btn.textContent = '复制失败'
+        }
+      })
+      pre.appendChild(btn)
+    }
+  })
+  // 目录：h2/h3 提取
+  const items = []
+  el.querySelectorAll('h2, h3').forEach((h, i) => {
+    const id = 'sec-' + i
+    h.id = id
+    items.push({ id, text: h.textContent, lvl: h.tagName === 'H2' ? 2 : 3 })
+  })
+  toc.value = items
+}
+
+function scrollToSec(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// ←/→ 切换同章前后知识点（输入框聚焦时不触发）
+function onKey(e) {
+  const tag = (e.target.tagName || '').toLowerCase()
+  if (['input', 'textarea', 'select'].includes(tag) || e.target.isContentEditable) return
+  if (!siblings.value) return
+  if (e.key === 'ArrowLeft' && siblings.value.prev) go('/kp/' + siblings.value.prev.id)
+  if (e.key === 'ArrowRight' && siblings.value.next) go('/kp/' + siblings.value.next.id)
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 const meta = computed(() => kpIndex.value[props.id] || kp.value)
 
@@ -107,7 +182,7 @@ function stars(d) {
           </div>
         </div>
 
-        <div v-if="kp.detailHtml" class="card md-body stagger" style="animation-delay: 60ms" v-html="kp.detailHtml" />
+        <div ref="bodyEl" v-if="kp.detailHtml" class="card md-body stagger" style="animation-delay: 60ms" v-html="kp.detailHtml" />
         <div v-else class="card outline-box pad stagger" style="animation-delay: 60ms">
           <div class="section-title">📖 知识点大纲</div>
           <ul>
@@ -135,6 +210,20 @@ function stars(d) {
       </div>
 
       <aside>
+        <div v-if="toc.length >= 3" class="card side-card pad stagger" style="animation-delay: 40ms">
+          <div class="section-title">📑 本页目录</div>
+          <ul class="toc-list">
+            <li
+              v-for="t in toc"
+              :key="t.id"
+              :class="t.lvl === 2 ? '' : 'lvl2'"
+            >
+              <a :href="'#' + t.id" @click.prevent="scrollToSec(t.id)">{{ t.text }}</a>
+            </li>
+          </ul>
+          <p class="form-hint" style="margin-top: 8px">提示：← → 键切换本课前后知识点</p>
+        </div>
+
         <div class="card side-card pad stagger" style="animation-delay: 80ms">
           <div class="section-title">📚 引用出处（可验证）</div>
           <ul class="ref-list">

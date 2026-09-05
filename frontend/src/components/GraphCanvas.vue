@@ -20,6 +20,8 @@ const hiddenModules = ref(new Set())
 // 两类关系的显示开关：前置（手工声明）与相似（算法发现）
 const showPrereqs = ref(true)
 const showSimilar = ref(true)
+// 复习模式：只显示未掌握的知识点
+const onlyUnmastered = ref(false)
 // 帧预算守卫：连续掉帧时逐级降级（0 正常 → 1 隐藏标签 → 2 隐藏边），恢复后回升
 const lodLevel = ref(0)
 
@@ -284,6 +286,7 @@ function createRenderer() {
       if (hovered === node) res.zIndex = 1
       if (dragged === node) res.forceLabel = true
       if (hiddenModules.value.has(data.moduleId)) res.hidden = true
+      if (onlyUnmastered.value && mastered) res.hidden = true
       // LOD 降级：1 级隐藏非活跃标签（forceLabel 优先级更高，悬停/掌握仍显示）
       if (lodLevel.value >= 1 && !res.forceLabel && !mastered) res.forceLabel = false
       return res
@@ -403,6 +406,11 @@ function toggleRelations(kind) {
   else showSimilar.value = !showSimilar.value
   renderer?.refresh()
 }
+function toggleOnlyUnmastered() {
+  onlyUnmastered.value = !onlyUnmastered.value
+  renderer?.refresh()
+  recountVisible()
+}
 
 const visibleCount = ref(0)
 function recountVisible() {
@@ -513,6 +521,10 @@ const legend = computed(() => {
       <div class="legend-item" :class="{ off: !showSimilar }" style="color: var(--muted)" @click="toggleRelations('similar')">
         <span class="c-faint">┈</span>
         <span class="c-text" style="flex: 1">相似关联（算法）</span>
+      </div>
+      <div class="legend-item" :class="{ off: !onlyUnmastered }" style="color: var(--muted)" @click="toggleOnlyUnmastered">
+        <span style="color: var(--gold)">◎</span>
+        <span class="c-text" style="flex: 1">只看未掌握</span>
       </div>
     </div>
 

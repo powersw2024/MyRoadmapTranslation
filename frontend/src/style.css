@@ -87,6 +87,8 @@ button { font-family: inherit; }
 
 ::selection { background: rgba(249, 115, 22, 0.35); }
 
+mark { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+
 /* ---------- 顶栏 ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 50;
@@ -348,10 +350,15 @@ button { font-family: inherit; }
 .kp-layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .kp-layout { grid-template-columns: 1fr; } }
 
-.md-body { padding: 24px 28px; line-height: 1.85; font-size: 14.5px; }
-.md-body h1 { font-size: 22px; margin: 18px 0 12px; }
-.md-body h2 { font-size: 18px; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border-soft); }
-.md-body h3 { font-size: 15.5px; margin: 20px 0 8px; }
+.md-body { padding: 28px 32px; line-height: 1.95; font-size: 15.5px; letter-spacing: 0.01em; }
+.md-body h1 { font-size: 24px; font-weight: 800; margin: 20px 0 14px; letter-spacing: 0.2px; }
+.md-body h2 {
+  font-size: 19.5px; font-weight: 800; margin: 30px 0 12px; padding-bottom: 8px;
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  letter-spacing: 0.2px;
+}
+.md-body h2:first-child { margin-top: 4px; }
+.md-body h3 { font-size: 16.5px; font-weight: 700; margin: 24px 0 10px; }
 .md-body p { margin: 10px 0; overflow-wrap: break-word; }
 .callout p { overflow-wrap: anywhere; }
 .md-body ul, .md-body ol { padding-left: 22px; margin: 8px 0; }
@@ -372,6 +379,44 @@ button { font-family: inherit; }
 .md-body th { background: var(--panel-soft); }
 .md-body input[type='checkbox'] { accent-color: var(--accent); margin-right: 6px; }
 .md-body hr { border: none; border-top: 1px solid var(--border-soft); margin: 20px 0; }
+.md-body strong { color: var(--text); font-weight: 700; }
+
+/* 代码块复制按钮 */
+.copy-btn {
+  position: absolute; top: 8px; right: 8px;
+  padding: 3px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--muted); font-size: 11.5px; cursor: pointer;
+  opacity: 0; transition: opacity 0.2s, border-color 0.2s, color 0.2s;
+}
+.md-body pre:hover .copy-btn, .copy-btn.copied { opacity: 1; }
+.copy-btn:hover { border-color: var(--accent); color: var(--text); }
+.copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+
+/* ---------- highlight.js 主题（跟随明暗令牌，两套模式通吃） ---------- */
+.hljs { color: var(--text); background: transparent; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type { color: #c678dd; }
+:root[data-theme='light'] .hljs-keyword, :root[data-theme='light'] .hljs-selector-tag,
+:root[data-theme='light'] .hljs-built_in, :root[data-theme='light'] .hljs-type { color: #a626a4; }
+.hljs-string, .hljs-attr { color: #98c379; }
+:root[data-theme='light'] .hljs-string, :root[data-theme='light'] .hljs-attr { color: #50a14f; }
+.hljs-number, .hljs-literal { color: #d19a66; }
+:root[data-theme='light'] .hljs-number, :root[data-theme='light'] .hljs-literal { color: #b76b01; }
+.hljs-title, .hljs-title.function_, .hljs-name { color: #61afef; }
+:root[data-theme='light'] .hljs-title, :root[data-theme='light'] .hljs-title.function_, :root[data-theme='light'] .hljs-name { color: #4078f2; }
+.hljs-comment, .hljs-quote { color: var(--faint); font-style: italic; }
+.hljs-meta, .hljs-symbol { color: #56b6c2; }
+:root[data-theme='light'] .hljs-meta, :root[data-theme='light'] .hljs-symbol { color: #0184bc; }
+.hljs-variable, .hljs-template-variable, .hljs-punctuation { color: var(--text); }
+
+/* ---------- 目录（TOC） ---------- */
+.toc-list { list-style: none; }
+.toc-list li { padding: 4px 0 4px 14px; border-left: 2px solid var(--border-soft); }
+.toc-list li.lvl2 { padding-left: 26px; }
+.toc-list li.active { border-left-color: var(--accent); }
+.toc-list a { color: var(--muted); font-size: 13px; display: block; transition: color 0.2s; }
+.toc-list a:hover { color: var(--accent); text-decoration: none; }
+.toc-list li.active a { color: var(--text); font-weight: 600; }
 
 .outline-box { padding: 20px 24px; }
 .outline-box li { padding: 6px 0 6px 24px; position: relative; color: var(--muted); line-height: 1.7; font-size: 14px; }
@@ -483,15 +528,15 @@ button { font-family: inherit; }
    所有组件从这里取字号、字色、留白，禁止内联静态样式
    ============================================================ */
 
-/* 字阶（全站唯一来源） */
-.t-hero   { font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; letter-spacing: 0.5px; }
-.t-page   { font-size: 22px; font-weight: 700; }
-.t-section{ font-size: 15px; font-weight: 700; }
-.t-item   { font-size: 14.5px; font-weight: 700; }
-.t-body   { font-size: 14px; line-height: 1.8; }
-.t-desc   { font-size: 13.5px; line-height: 1.7; }
-.t-note   { font-size: 12.5px; }
-.t-caption{ font-size: 11px; letter-spacing: 0.4px; }
+/* 字阶（全站唯一来源）—— 层级间保持 ≥15% 尺寸差与明确字重差，保证对比可辨 */
+.t-hero   { font-size: clamp(26px, 3.6vw, 34px); font-weight: 800; letter-spacing: 0.3px; line-height: 1.3; }
+.t-page   { font-size: 26px; font-weight: 800; letter-spacing: 0.2px; line-height: 1.35; }
+.t-section{ font-size: 16px; font-weight: 700; }
+.t-item   { font-size: 15.5px; font-weight: 700; }
+.t-body   { font-size: 15px; line-height: 1.9; }
+.t-desc   { font-size: 14px; line-height: 1.8; }
+.t-note   { font-size: 13px; line-height: 1.7; }
+.t-caption{ font-size: 11.5px; letter-spacing: 0.4px; }
 .t-num    { font-variant-numeric: tabular-nums; }
 
 /* 字色 */

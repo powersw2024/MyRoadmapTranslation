@@ -175,6 +175,16 @@ impl Db {
         .map_err(|e| format!("提交不存在: {e}"))
     }
 
+    /// 取某次提交的 AI 评语。
+    pub fn submission_comments(&self, id: i64) -> Result<Option<String>, String> {
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        conn.query_row(
+            "SELECT ai_comments FROM submission WHERE id = ?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
+        .map_err(|e| format!("提交不存在: {e}"))
+    }
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {

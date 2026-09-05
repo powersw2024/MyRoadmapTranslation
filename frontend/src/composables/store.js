@@ -99,6 +99,18 @@ export function useProgress() {
   return { progress, markRead, setMastered, setQuizBest, masteredCount }
 }
 
+// ---------- 断点续学（记录最后访问的知识点） ----------
+const LAST_KEY = 'rustway.lastKp'
+
+export function setLastKp(id, title) {
+  localStorage.setItem(LAST_KEY, JSON.stringify({ id, title, ts: Date.now() }))
+}
+
+export function useLastKp() {
+  const last = ref(JSON.parse(localStorage.getItem(LAST_KEY) || 'null'))
+  return last
+}
+
 // ---------- 明暗主题 ----------
 const theme = ref(document.documentElement.dataset.theme || 'dark')
 

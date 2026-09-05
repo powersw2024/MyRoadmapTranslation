@@ -210,13 +210,20 @@ async fn serve() {
         db,
     };
     let static_dir = std::env::var("RUSTWAY_STATIC").unwrap_or_else(|_| "frontend/dist".into());
-    // 静态资源带缓存头（Vite 产物含内容哈希，可放心缓存）
+    // 缓存策略：/assets/*（Vite 内容哈希文件名）一年 immutable；
+    // index.html 等入口 no-cache —— 前端发版后浏览器总能拿到新入口
+    let assets_service = tower::ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        ))
+        .service(ServeDir::new(format!("{static_dir}/assets")));
     let static_service = tower::ServiceBuilder::new()
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
-            HeaderValue::from_static("public, max-age=3600"),
+            HeaderValue::from_static("no-cache"),
         ))
-        .service(ServeDir::new(static_dir).append_index_html_on_directories(true));
+        .service(ServeDir::new(&static_dir).append_index_html_on_directories(true));
 
     let app = Router::new()
         .route("/api/manifest", get(manifest))
@@ -229,7 +236,7 @@ async fn serve() {
         .route("/api/submissions", get(submissions))
         .route("/api/submissions/{id}", get(submission_detail))
         .route("/api/ai/config", get(ai_get_config))
-        .route("/api/ai/probe", axum::routing::post(ai_probe))
+        .route("/api/ai/latency", axum::routing::post(ai_latency))
         .fallback_service(static_service)
         .layer(CompressionLayer::new()) // gzip/br：manifest 与 dist 资源瘦身
         .layer(TraceLayer::new_for_http()) // 请求日志 → tracing 输出
@@ -414,7 +421,21 @@ async fn submission_detail(
         return Err(bad_request("数据库不可用"));
     };
     let (kp_id, code) = db.submission_code(id).map_err(bad_request)?;
-    Ok(Json(json!({ "id": id, "kpId": kp_id, "code": code })))
+    let meta = db
+        .list_submissions(None)
+        .map_err(bad_request)?
+        .into_iter()
+        .find(|m| m.id == id);
+    let ai_comments = db.submission_comments(id).map_err(bad_request)?;
+    Ok(Json(json!({
+        "id": id,
+        "kpId": kp_id,
+        "code": code,
+        "passed": meta.as_ref().map(|m| m.passed),
+        "createdAt": meta.as_ref().map(|m| m.created_at.clone()),
+        "aiScore": meta.as_ref().and_then(|m| m.ai_score),
+        "aiComments": ai_comments,
+    })))
 }
 
 #[derive(serde::Deserialize)]
@@ -560,8 +581,8 @@ async fn ai_get_config(State(st): State<AppState>) -> Json<serde_json::Value> {
     Json(out)
 }
 
-/// 后端探针：用当前生效（环境变量）配置发起一次最小补全，返回耗时。
-async fn ai_probe(
+/// 最小补全测速：用当前生效（环境变量）配置发起一次最小补全，返回耗时。
+async fn ai_latency(
     State(st): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let Some(cfg) = effective_ai(&st) else {
@@ -569,7 +590,7 @@ async fn ai_probe(
             "AI 尚未配置：请通过环境变量 RUSTWAY_AI_BACKEND 等设置",
         ));
     };
-    match rustway::ai::probe_backend(&cfg).await {
+    match rustway::ai::first_completion_latency(&cfg).await {
         Ok(ms) => Ok(Json(json!({
             "ok": true,
             "latencyMs": ms,

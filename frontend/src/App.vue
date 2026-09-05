@@ -1,22 +1,25 @@
 <script setup>
-import { computed } from 'vue'
-import { useRoute, useManifest, useProgress, useTheme, go } from './composables/store'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useManifest, useProgress, useTheme, useLastKp, go } from './composables/store'
 import ThemeToggle from './components/ThemeToggle.vue'
 import GlobalSearch from './components/GlobalSearch.vue'
 import HomeView from './views/HomeView.vue'
 import KpView from './views/KpView.vue'
 import ModuleView from './views/ModuleView.vue'
 import AiSettingsView from './views/AiSettingsView.vue'
+import WorksView from './views/WorksView.vue'
 
 const route = useRoute()
 const { manifest, manifestError } = useManifest()
 const { progress, masteredCount } = useProgress()
 const { theme } = useTheme()
+const lastKp = useLastKp()
 
 const view = computed(() => {
   if (route.value.name === 'kp') return KpView
   if (route.value.name === 'module') return ModuleView
   if (route.value.name === 'ai') return AiSettingsView
+  if (route.value.name === 'works') return WorksView
   return HomeView
 })
 
@@ -26,6 +29,17 @@ const totalPlaced = computed(() => {
   for (const m of manifest.value.modules) for (const c of m.chapters) n += c.kps.length
   return n
 })
+
+// 全局快捷键：/ 聚焦搜索（输入框内不触发）
+function onKey(e) {
+  if (e.key !== '/' || route.value.name === 'ai') return
+  const t = e.target
+  if (t.matches?.('input, textarea, select') || t.isContentEditable) return
+  e.preventDefault()
+  document.querySelector('.search-wrap input')?.focus()
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
@@ -40,13 +54,23 @@ const totalPlaced = computed(() => {
 
     <GlobalSearch />
 
-    <div v-if="manifest" class="progress-pill" title="已掌握 / 已编排知识点">
+    <button
+      v-if="lastKp && route.name !== 'kp'"
+      class="chip continue-btn"
+      title="回到上次学习位置"
+      @click="go('/kp/' + lastKp.id)"
+    >
+      ▶ 继续学习：{{ lastKp.title }}
+    </button>
+
+    <div v-if="manifest && totalPlaced > 0" class="progress-pill" title="已掌握 / 已编排知识点">
       <span class="progress-num">{{ masteredCount }}/{{ totalPlaced }}</span>
       <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: totalPlaced ? (masteredCount / totalPlaced) * 100 + '%' : '0%' }" />
+        <div class="progress-fill" :style="{ width: (masteredCount / totalPlaced) * 100 + '%' }" />
       </div>
     </div>
 
+    <a class="icon-link" href="#/works" title="我的作品" @click.prevent="go('/works')">🗂️</a>
     <a class="icon-link" href="#/ai" title="AI 代码评价" @click.prevent="go('/ai')">⚙️</a>
 
     <ThemeToggle />

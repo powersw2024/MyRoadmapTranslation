@@ -38,7 +38,7 @@ async function testConnection() {
   testing.value = true
   testResult.value = null
   try {
-    const res = await fetch('/api/ai/probe', { method: 'POST' })
+    const res = await fetch('/api/ai/latency', { method: 'POST' })
     testResult.value = await res.json()
   } catch (e) {
     testResult.value = { ok: false, error: String(e.message || e) }

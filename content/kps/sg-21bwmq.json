@@ -1,0 +1,56 @@
+{
+  "kps": [
+    {
+      "id": "sg-21bwmqda",
+      "title": "哈佛 CS50x：计算机科学入门",
+      "difficulty": 1,
+      "minutes": 600,
+      "summary": "哈佛连续多年最受欢迎的公选课：内容温和、作业全部免费开源，是零基础者建立计算机科学整体认知的最佳起点。",
+      "outline": [
+        "课程定位：哈佛全校公选课，覆盖 C、Python、SQL 与 Web 基础，难度温和但问题集（pset）质量极高且免费开源",
+        "经典场面：Malan 教授当场撕黄页电话簿演示二分查找——1024 页只需约 10 次对折就能找到目标，直观展示 O(log n) 的威力",
+        "对 Rust/Python 学习者的价值：本课用 C 建立内存与编译的底层直觉；你可以在学习时用 Python 或 Rust 重新实现每周的算法思想做对照",
+        "二分查找 Python 版（已验证：输出 776 / -1 / 最多比较 11 次）：`def bs(xs,t):\n lo,hi=0,len(xs)-1\n while lo<=hi:\n  m=(lo+hi)//2\n  if xs[m]==t: return m\n  if xs[m]<t: lo=m+1\n  else: hi=m-1\n return -1`",
+        "二分查找 Rust 版（已验证：输出 Some(776) / None）：`fn bs(xs:&[i32],t:i32)->Option<usize>{\n let(mut lo,mut hi)=(0,xs.len()-1);\n while lo<=hi{\n  let m=(lo+hi)/2;\n  match xs[m]{x if x==t=>return Some(m),x if x<t=>lo=m+1,_=>hi=m-1}}\n None}`"
+      ],
+      "prereqs": [],
+      "task": "打开 CS50x 官网（https://cs50.harvard.edu/x/2025/），确认能访问 Week 0 讲义与问题集列表；然后把上面二分查找的 Python 版扩展为支持重复元素的 lower_bound（返回第一个 ≥ target 的下标），用 [1,1,2,2,3] 查 2 应得 2、查 4 应得 5——把两组输出贴进学习笔记即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/编程入门/C/CS50.md",
+          "u": "https://cs50.harvard.edu/x/2025/"
+        },
+        {
+          "t": "CS50x 官方课程网站（2025）",
+          "u": "https://cs50.harvard.edu/x/2025/"
+        },
+        {
+          "t": "The Rust Book：常见编程概念（与课程 C 内容做对照）",
+          "u": "https://doc.rust-lang.org/book/ch03-00-common-programming-concepts.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "CS50x 课程最突出的特点是下列哪一项？",
+          "opts": [
+            "需要付费才能获取作业",
+            "只教授 Python 一门语言",
+            "入门友好且全部问题集免费开源、质量高",
+            "必须先掌握汇编语言才能学习"
+          ],
+          "answer": 2,
+          "why": "CS50x 是全校公选课，定位入门、难度温和，作业全部免费开源且质量极高；它覆盖 C、Python、SQL、Web 多种语言，也不要求汇编基础。"
+        },
+        {
+          "kind": "blank",
+          "q": "撕黄页演示的算法是__查找，在 1024 个有序元素中最坏约需比较 11 次，复杂度为 O(log n)。",
+          "accept": ["二分", "binary search", "折半"],
+          "why": "二分查找每轮将搜索区间减半，1024 = 2^10，最多比较 ⌊log2 n⌋+1 = 11 次。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["入门课程", "计算机科学", "二分查找"],
+      "author": "powersw2024"
+    }
+  ]
+}

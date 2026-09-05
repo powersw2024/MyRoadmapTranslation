@@ -7,6 +7,7 @@
  *   通过后自动落盘留档；若服务端配置了 AI 后端（Ollama/OpenAI 兼容）可请求代码评价
  */
 import { ref, computed, watch } from 'vue'
+import CodeEditor from './CodeEditor.vue'
 
 const props = defineProps({
   questions: { type: Array, required: true },
@@ -294,13 +295,7 @@ defineExpose({ correctCount, allAnswered, allCorrect })
 
       <!-- 编程题 -->
       <div v-else-if="q.kind === 'code'" class="quiz-code">
-        <textarea
-          v-model="codes[qi].code"
-          class="code-editor"
-          spellcheck="false"
-          rows="9"
-          placeholder="在此编写代码…"
-        />
+        <CodeEditor v-model="codes[qi].code" language="rust" />
         <div class="code-actions">
           <button class="btn btn-sm" :disabled="codes[qi].running" @click="runCode(qi)">
             {{ codes[qi].running ? '⏳ 编译运行中…' : '▶ 运行测试' }}
