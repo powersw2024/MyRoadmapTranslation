@@ -1,0 +1,53 @@
+{
+  "kps": [
+    {
+      "id": "sg-2uo3fqrn",
+      "title": "代理服务器的工作原理：转发、正向与反向代理",
+      "difficulty": 2,
+      "minutes": 30,
+      "summary": "代理的本质是「替你收发字节」的中间人：用一次本地 TCP 转发实验直观理解正向代理、反向代理与隧道的区别。",
+      "outline": [
+        "源文件说明：docs/CSStudyGuide-main/必学工具/科学上网.md 全文仅两行占位反广告，无实质内容；本知识点抽取其标题所指的网络技术概念",
+        "代理的核心动作：接受客户端连接 → 按协议解析目标 → 向目标转发字节 → 把响应原路带回（本站已验证该实验：经 127.0.0.1:9000 转发器访问 8000 端口页面，内容与直连完全一致）",
+        "正向代理：代理站在客户端一侧，替客户端访问外部目标（客户端配置代理地址；HTTP 代理、SOCKS 代理是常见协议）",
+        "反向代理：代理站在服务端一侧，替服务端接收请求并转发给内网服务（Nginx、负载均衡是典型应用）",
+        "隧道：把一种协议封装进另一种连接中传输（如 SSH 隧道把 TCP 流量封装进 SSH 连接）",
+        "安全视角：代理是中间人，能看到/改写未加密流量，因此敏感流量应走 TLS 等端到端加密",
+        "Rust 生态中的对应实现：tokio 的 async TcpListener/TcpStream 即可写出生产级转发器（本项目 judge 沙箱同款思路）"
+      ],
+      "prereqs": [],
+      "task": "用 Python 标准库写一个极简 TCP 转发器（listen 127.0.0.1:9000 → 127.0.0.1:8000）：先用 python -m http.server 8000 起一个静态服务，再 curl http://127.0.0.1:9000/ ，确认返回内容与直连 8000 完全一致——两次输出相同即完成验证（本站已按此步骤复现通过）。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/必学工具/科学上网.md（仅占位，本知识点为概念抽取）",
+          "u": "https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Proxy_servers_and_tunneling"
+        },
+        {
+          "t": "MDN：代理服务器与 HTTP 隧道",
+          "u": "https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Proxy_servers_and_tunneling"
+        },
+        {
+          "t": "Python 官方文档：socket 低层网络接口",
+          "u": "https://docs.python.org/3/library/socket.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "Nginx 帮一台 Web 服务器接收外部请求并转交给内网应用，这属于哪一种代理？",
+          "opts": ["正向代理", "反向代理", "SOCKS 代理", "匿名 FTP"],
+          "answer": 1,
+          "why": "站在服务端一侧、替服务器接收并转发请求的是反向代理；正向代理站在客户端一侧，替客户端访问外部。"
+        },
+        {
+          "kind": "subjective",
+          "prompt": "为什么说经过代理的明文 HTTP 流量对代理是完全可见的？应如何缓解？",
+          "reference": "1) 代理需要解析（至少解析到目标地址）并逐段转发字节，处于数据路径中间，明文内容对其可读可改；\n2) TLS 端到端加密后，代理只能看到「连给了谁（SNI/IP）」，看不到内容；\n3) 严谨场景还可配合证书校验（防中间人）与 VPN/隧道封装。",
+          "why": "考察对代理「中间人位置」与端到端加密边界的理解。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["网络", "代理", "TCP"],
+      "author": "powersw2024"
+    }
+  ]
+}
