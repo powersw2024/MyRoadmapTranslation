@@ -1,0 +1,58 @@
+{
+  "kps": [
+    {
+      "id": "cn-4kev3u5d",
+      "title": "剑指 Offer 3：数组中重复的数字",
+      "difficulty": 2,
+      "minutes": 25,
+      "summary": "在长度 n、元素范围 [0, n-1] 的数组中找出任意重复数字：把值 i 归位到下标 i，归位时撞车即为重复，O(N)/O(1)。",
+      "outline": [
+        "题目：数组长度 n，所有数字都在 0..n-1 范围内，某些数字重复，找出任意一个重复数字（输入 {2,3,1,0,2,5} → 输出 2）",
+        "约束：时间 O(N)、空间 O(1)——不能排序，也不能开标记数组",
+        "归位法核心：值为 i 的元素应坐在下标 i；遍历时若 nums[i]≠i 就把它换到下标 nums[i]，换过去前先看目标位是否已坐着正确的人，是则找到重复",
+        "Python 实现（已验证输出 2 / -1）：`def duplicate(nums):\n for i in range(len(nums)):\n  while nums[i]!=i:\n   j=nums[i]\n   if nums[j]==j: return j\n   nums[i],nums[j]=nums[j],nums[i]\n return -1`",
+        "Rust 实现（已验证输出 2 / -1）：用 `nums.swap(i, j)` 完成无 borrow 冲突的交换，比手写三方交换更符合所有权习惯",
+        "复杂度：每个元素最多被换一次到位，总计 O(N)；原地交换无需额外空间"
+      ],
+      "prereqs": [],
+      "task": "在本地把 Python 版的 duplicate 用 [3,1,2,0,2,5,3] 跑通（应输出 3 或 2 之一，均为合法重复值），然后到牛客网本题页面用任一语言提交并通过全部用例。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CS-Notes-master/notes/3. 数组中重复的数字.md",
+          "u": "https://github.com/CyC2018/CS-Notes/blob/master/notes/3.%20%E6%95%B0%E7%BB%84%E4%B8%AD%E9%87%8D%E5%A4%8D%E7%9A%84%E6%95%B0%E5%AD%97.md"
+        },
+        {
+          "t": "牛客网：数组中重复的数字（在线判题）",
+          "u": "https://www.nowcoder.com/practice/6fe361ede7e54db1b84adc81d09d8524?tpId=13&tqId=11203"
+        },
+        {
+          "t": "Rust 标准库：slice::swap",
+          "u": "https://doc.rust-lang.org/std/primitive.slice.html#method.swap"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "归位法为什么能做到 O(1) 空间找到重复数字？",
+          "opts": [
+            "因为数组已经有序",
+            "因为值域 [0, n-1] 与下标范围一致，可以把每个值换到等于自己的下标上，重复值归位时必然撞车",
+            "因为用了哈希表",
+            "因为重复数字总是相邻的"
+          ],
+          "answer": 1,
+          "why": "值域与下标一一对应是本题的关键性质：若 nums[i] 想去的位置 nums[i] 上已是同值，说明该值出现两次；整个过程只做原地交换。"
+        },
+        {
+          "kind": "choice",
+          "q": "Rust 中在原地交换切片的两个元素，最符合习惯的写法是？",
+          "opts": ["nums.swap(i, j)", "std::mem::swap(&mut nums, &mut nums)", "let t = nums[i]; nums[i] = nums[j]; nums[j] = t;（在同一个作用域内）", "nums[i] ^= nums[j]; nums[j] ^= nums[i]; nums[i] ^= nums[j];"],
+          "answer": 0,
+          "why": "slice::swap 是标准库提供的原地交换方法，同时完成借用检查要求的分离访问；异或交换在相同下标时会清零出错，也不可读。"
+        }
+      ],
+      "domain": "算法",
+      "tags": ["数组", "原地交换", "剑指Offer"],
+      "author": "powersw2024"
+    }
+  ]
+}
