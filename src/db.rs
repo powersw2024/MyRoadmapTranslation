@@ -77,29 +77,36 @@ impl Db {
         })
     }
 
-    /// 保存一次通过的作品：代码写入 `data/submissions/<kp>/<时间戳>.rs`，
-    /// 数据库记录「知识点 ↔ 文件 ↔ 结果」映射。
+    /// 保存一次通过的作品：内容写入 `data/submissions/<kp>/<时间戳>.<ext>`，
+    /// 数据库记录「知识点 ↔ 文件 ↔ 结果」映射。code 题扩展名 .rs，其余 .txt。
     pub fn save_submission(
         &self,
         kp_id: &str,
+        kind: &str,
+        passed: bool,
         code: &str,
         judge_output: &str,
+        ai_score: Option<i64>,
     ) -> Result<SubmissionMeta, String> {
+        let ext = if kind == "code" { "rs" } else { "txt" };
         let dir = self.data_dir.join("submissions").join(kp_id);
         std::fs::create_dir_all(&dir).map_err(|e| format!("创建作品目录失败: {e}"))?;
         let created_at = chrono_now();
-        let file_path = dir.join(format!("{}.rs", created_at));
+        let file_path = dir.join(format!("{}.{}", created_at, ext));
         std::fs::write(&file_path, code).map_err(|e| format!("写入作品文件失败: {e}"))?;
 
         let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
         conn.execute(
-            "INSERT INTO submission (kp_id, kind, passed, file_path, code, judge_output, created_at) \
-             VALUES (?1, 'code', 1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO submission (kp_id, kind, passed, file_path, code, judge_output, ai_score, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 kp_id,
+                kind,
+                passed as i64,
                 file_path.display().to_string(),
                 code,
                 judge_output,
+                ai_score,
                 created_at
             ],
         )
@@ -108,7 +115,7 @@ impl Db {
         Ok(SubmissionMeta {
             id,
             kp_id: kp_id.into(),
-            passed: true,
+            passed,
             file_path: file_path.display().to_string(),
             ai_score: None,
             created_at,
@@ -167,6 +174,47 @@ impl Db {
         )
         .map_err(|e| format!("提交不存在: {e}"))
     }
+
+    // ---------------- AI 配置（前端设置页持久化；环境变量作为缺省回退） ----------------
+
+    /// 读取完整 AI 配置（含密钥，仅供服务端内部调用；HTTP 响应必须掩码）。
+    pub fn get_ai_config_full(&self) -> Option<(String, String, String, Option<String>)> {
+        let conn = self.conn.lock().ok()?;
+        conn.query_row(
+            "SELECT backend, base_url, model, api_key FROM ai_config WHERE id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .ok()
+    }
+
+    /// 保存 AI 配置；api_key 传 None 表示保留原值。
+    pub fn save_ai_config(
+        &self,
+        backend: &str,
+        base_url: &str,
+        model: &str,
+        api_key: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|_| "数据库锁获取失败")?;
+        match api_key {
+            Some(key) => conn
+                .execute(
+                    "INSERT INTO ai_config (id, backend, base_url, model, api_key) VALUES (1, ?1, ?2, ?3, ?4) \
+                     ON CONFLICT(id) DO UPDATE SET backend = ?1, base_url = ?2, model = ?3, api_key = ?4",
+                    rusqlite::params![backend, base_url, model, key],
+                )
+                .map(|_| ()),
+            None => conn
+                .execute(
+                    "INSERT INTO ai_config (id, backend, base_url, model, api_key) VALUES (1, ?1, ?2, ?3, NULL) \
+                     ON CONFLICT(id) DO UPDATE SET backend = ?1, base_url = ?2, model = ?3",
+                    rusqlite::params![backend, base_url, model],
+                )
+                .map(|_| ()),
+        }
+        .map_err(|e| format!("保存 AI 配置失败: {e}"))
+    }
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {
@@ -217,6 +265,13 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
             created_at   TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_submission_kp ON submission(kp_id);
+        CREATE TABLE IF NOT EXISTS ai_config (
+            id       INTEGER PRIMARY KEY CHECK (id = 1),
+            backend  TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            model    TEXT NOT NULL,
+            api_key  TEXT
+        );
         COMMIT;
         "#,
     )

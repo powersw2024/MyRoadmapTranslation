@@ -6,15 +6,19 @@ import GlobalSearch from './components/GlobalSearch.vue'
 import HomeView from './views/HomeView.vue'
 import KpView from './views/KpView.vue'
 import ModuleView from './views/ModuleView.vue'
+import AiSettingsView from './views/AiSettingsView.vue'
 
 const route = useRoute()
 const { manifest, manifestError } = useManifest()
 const { progress, masteredCount } = useProgress()
 const { theme } = useTheme()
 
-const view = computed(() =>
-  route.value.name === 'kp' ? KpView : route.value.name === 'module' ? ModuleView : HomeView
-)
+const view = computed(() => {
+  if (route.value.name === 'kp') return KpView
+  if (route.value.name === 'module') return ModuleView
+  if (route.value.name === 'ai') return AiSettingsView
+  return HomeView
+})
 
 const totalPlaced = computed(() => {
   if (!manifest.value) return 0
@@ -42,6 +46,8 @@ const totalPlaced = computed(() => {
         <div class="progress-fill" :style="{ width: totalPlaced ? (masteredCount / totalPlaced) * 100 + '%' : '0%' }" />
       </div>
     </div>
+
+    <a class="icon-link" href="#/ai" title="AI 设置" @click.prevent="go('/ai')">⚙️</a>
 
     <ThemeToggle />
   </header>

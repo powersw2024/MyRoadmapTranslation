@@ -224,9 +224,12 @@ async fn serve() {
         .route("/api/health", get(health))
         .route("/api/schema", get(schema))
         .route("/api/judge", axum::routing::post(judge))
+        .route("/api/grade", axum::routing::post(grade))
         .route("/api/review", axum::routing::post(review))
         .route("/api/submissions", get(submissions))
         .route("/api/submissions/{id}", get(submission_detail))
+        .route("/api/ai/config", get(ai_get_config).post(ai_save_config))
+        .route("/api/ai/test", axum::routing::post(ai_test))
         .fallback_service(static_service)
         .layer(CompressionLayer::new()) // gzip/br：manifest 与 dist 资源瘦身
         .layer(TraceLayer::new_for_http()) // 请求日志 → tracing 输出
@@ -285,7 +288,7 @@ async fn health(State(st): State<AppState>) -> Json<serde_json::Value> {
             "similarEdges": s.similar_edges.len(),
         })
     });
-    let ai = rustway::ai::AiConfig::from_env().map(|c| {
+    let ai = effective_ai(&st).map(|c| {
         json!({
             "enabled": true,
             "backend": c.backend,
@@ -333,7 +336,9 @@ async fn judge(
     let mut submission_id = None;
     if outcome.passed {
         if let Some(db) = &st.db {
-            if let Ok(meta) = db.save_submission(&req.kp_id, &req.code, &outcome.output) {
+            if let Ok(meta) =
+                db.save_submission(&req.kp_id, "code", true, &req.code, &outcome.output, None)
+            {
                 submission_id = Some(meta.id);
             }
         }
@@ -359,8 +364,8 @@ async fn review(
     let Some(db) = &st.db else {
         return Err(bad_request("数据库不可用，无法评价"));
     };
-    let ai = rustway::ai::AiConfig::from_env().ok_or_else(|| {
-        bad_request("AI 评价未启用：请设置 RUSTWAY_AI_BACKEND（ollama | openai）等环境变量")
+    let ai = effective_ai(&st).ok_or_else(|| {
+        bad_request("AI 评价未启用：请在「AI 设置」页配置，或设置 RUSTWAY_AI_BACKEND 等环境变量")
     })?;
     let (kp_id, code) = db.submission_code(req.submission_id).map_err(bad_request)?;
     let (title, task) = st
@@ -412,6 +417,107 @@ async fn submission_detail(
     Ok(Json(json!({ "id": id, "kpId": kp_id, "code": code })))
 }
 
+#[derive(serde::Deserialize)]
+struct GradeReq {
+    kp_id: String,
+    answer: String,
+}
+
+/// 主观题批改：配置 AI 时对照参考答案打分；未配置 AI 时返回参考答案供自评。
+/// 两种模式的答案都会留档入库。
+async fn grade(
+    State(st): State<AppState>,
+    Json(req): Json<GradeReq>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let kp = st.store.kps.get(&req.kp_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "kp_not_found", "id": req.kp_id })),
+        )
+    })?;
+    let subjective = kp
+        .quiz
+        .iter()
+        .find(|q| q.kind_str() == "subjective")
+        .ok_or_else(|| bad_request(format!("知识点 {} 没有主观题", req.kp_id)))?;
+
+    if req.answer.trim().is_empty() {
+        return Err(bad_request("答案不能为空"));
+    }
+
+    // 留档（主观题始终入库：kind=subjective，passed 由批改/自评结果决定）
+    let record = |passed: bool, output: &str, ai_score: Option<i64>, db: &rustway::db::Db| {
+        db.save_submission(
+            &req.kp_id,
+            "subjective",
+            passed,
+            &req.answer,
+            output,
+            ai_score,
+        )
+        .ok()
+        .map(|m| m.id)
+    };
+
+    match effective_ai(&st) {
+        Some(cfg) => {
+            match rustway::ai::grade_answer(&cfg, &kp.title, &subjective.reference, &req.answer)
+                .await
+            {
+                Ok(r) => {
+                    let passed = r.score >= 60;
+                    let submission_id = st.db.as_ref().and_then(|db| {
+                        record(
+                            passed,
+                            &format!(
+                                "AI 批改 {} 分：{}\n{}",
+                                r.score,
+                                r.summary,
+                                r.suggestions.join("；")
+                            ),
+                            Some(r.score as i64),
+                            db,
+                        )
+                    });
+                    Ok(Json(json!({
+                        "mode": "ai",
+                        "passed": passed,
+                        "score": r.score,
+                        "summary": r.summary,
+                        "suggestions": r.suggestions,
+                        "reference": subjective.reference,
+                        "submissionId": submission_id,
+                    })))
+                }
+                // AI 后端不可用（如 Ollama 未启动）：优雅降级为自评模式，不阻塞学习
+                Err(e) => {
+                    eprintln!("⚠ AI 批改不可用，降级为自评模式: {e}");
+                    let submission_id = st.db.as_ref().and_then(|db| {
+                        record(false, &format!("自评模式（AI 批改失败: {e}）"), None, db)
+                    });
+                    Ok(Json(json!({
+                        "mode": "self",
+                        "degradedFrom": cfg.backend,
+                        "reference": subjective.reference,
+                        "submissionId": submission_id,
+                    })))
+                }
+            }
+        }
+        None => {
+            let submission_id = st
+                .db
+                .as_ref()
+                .and_then(|db| record(false, "自评模式（无 AI）", None, db));
+            Ok(Json(json!({
+                "mode": "self",
+                "reference": subjective.reference,
+                "submissionId": submission_id,
+            })))
+        }
+    }
+}
+
 fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::BAD_REQUEST,
@@ -424,6 +530,125 @@ fn internal_error(msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(json!({ "error": "internal", "message": msg.into() })),
     )
+}
+
+// ---------------- AI 配置页接口（设置持久化到 SQLite；环境变量作为缺省回退） ----------------
+
+/// 生效的 AI 配置：设置页保存的 DB 配置优先，其次环境变量。
+fn effective_ai(st: &AppState) -> Option<rustway::ai::AiConfig> {
+    if let Some(db) = &st.db {
+        if let Some((backend, base_url, model, api_key)) = db.get_ai_config_full() {
+            return Some(rustway::ai::AiConfig::custom(
+                &backend, &base_url, &model, api_key,
+            ));
+        }
+    }
+    rustway::ai::AiConfig::from_env()
+}
+
+/// 当前 AI 配置（密钥掩码：只返回是否已配置，永不明文回传）。
+async fn ai_get_config(State(st): State<AppState>) -> Json<serde_json::Value> {
+    let mut out = json!({
+        "backend": "",
+        "baseUrl": "",
+        "model": "",
+        "apiKeySet": false,
+        "source": "none",
+    });
+    if let Some(db) = &st.db {
+        if let Some((backend, base_url, model, key)) = db.get_ai_config_full() {
+            out["backend"] = json!(backend);
+            out["baseUrl"] = json!(base_url);
+            out["model"] = json!(model);
+            out["apiKeySet"] = json!(key.as_deref().map(|k| !k.is_empty()).unwrap_or(false));
+            out["source"] = json!("database");
+        }
+    }
+    if out["source"] == json!("none") {
+        if let Some(c) = rustway::ai::AiConfig::from_env() {
+            out["backend"] = json!(c.backend);
+            out["baseUrl"] = json!(c.base_url);
+            out["model"] = json!(c.model);
+            out["apiKeySet"] = json!(c.api_key.is_some());
+            out["source"] = json!("environment");
+        }
+    }
+    Json(out)
+}
+
+#[derive(serde::Deserialize)]
+struct AiSaveReq {
+    backend: String,
+    #[serde(default)]
+    base_url: String,
+    #[serde(default)]
+    model: String,
+    #[serde(default)]
+    api_key: Option<String>,
+    #[serde(default)]
+    clear_api_key: bool,
+}
+
+/// 保存 AI 配置到 SQLite。密钥仅入库，不回传、不写日志。
+async fn ai_save_config(
+    State(st): State<AppState>,
+    Json(req): Json<AiSaveReq>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let backend = req.backend.to_lowercase();
+    if !matches!(backend.as_str(), "ollama" | "openai") {
+        return Err(bad_request("backend 仅支持 ollama | openai"));
+    }
+    let base_url = if req.base_url.trim().is_empty() {
+        match backend.as_str() {
+            "ollama" => "http://127.0.0.1:11434".into(),
+            _ => return Err(bad_request("openai 后端必须提供 base_url")),
+        }
+    } else {
+        req.base_url.trim().to_string()
+    };
+    if let Err(e) = rustway::ai::validate_base_url(&base_url) {
+        return Err(bad_request(e));
+    }
+    let model = if req.model.trim().is_empty() {
+        match backend.as_str() {
+            "ollama" => "qwen2.5-coder:7b".into(),
+            _ => return Err(bad_request("openai 后端必须提供 model")),
+        }
+    } else {
+        req.model.trim().to_string()
+    };
+    let Some(db) = &st.db else {
+        return Err(bad_request("数据库不可用，无法保存配置"));
+    };
+    let key = if req.clear_api_key {
+        Some(String::new())
+    } else {
+        req.api_key.filter(|k| !k.trim().is_empty())
+    };
+    db.save_ai_config(&backend, &base_url, &model, key.as_deref())
+        .map_err(bad_request)?;
+    Ok(Json(json!({
+        "saved": true,
+        "apiKeySet": key.as_deref().map(|k| !k.is_empty()).unwrap_or(false)
+    })))
+}
+
+/// 接入测试：用当前生效配置发起一次最小补全，返回耗时。
+async fn ai_test(
+    State(st): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let Some(cfg) = effective_ai(&st) else {
+        return Err(bad_request("AI 尚未配置：请先选择后端并保存"));
+    };
+    match rustway::ai::test_connection(&cfg).await {
+        Ok(ms) => Ok(Json(json!({
+            "ok": true,
+            "latencyMs": ms,
+            "backend": cfg.backend,
+            "model": cfg.model,
+        }))),
+        Err(e) => Ok(Json(json!({ "ok": false, "error": e }))),
+    }
 }
 
 /// 知识点加载规范（对外发布）：贡献者按此结构编写 JSON 提交。

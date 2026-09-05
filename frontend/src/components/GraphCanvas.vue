@@ -40,6 +40,9 @@ let spinPausedUntil = 0
 let lastSpinT = 0
 
 function frameGuard(now) {
+  // 先续帧再执行逻辑：任何 early-return 分支都不会杀死循环
+  // （此前宽限期 return 未续帧，导致循环第一帧即死、自转与降级守卫全部失效）
+  rafId = requestAnimationFrame(frameGuard)
   const delta = now - lastFrame
   lastFrame = now
 
@@ -76,7 +79,6 @@ function frameGuard(now) {
       renderer?.refresh()
     }
   }
-  rafId = requestAnimationFrame(frameGuard)
 }
 
 const offModules = computed(() => hiddenModules.value)

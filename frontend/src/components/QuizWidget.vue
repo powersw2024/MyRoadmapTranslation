@@ -18,6 +18,7 @@ const emit = defineEmits(['passed', 'update'])
 const picks = ref([])      // choice：选中下标
 const blanks = ref([])     // blank：{ value, done, ok }
 const codes = ref([])      // code：{ code, done, passed, output, running, submissionId, review, reviewing, reviewErr }
+const subjects = ref([])   // subjective：{ answer, done, passed, score, summary, suggestions, running, err, selfChecked }
 const aiEnabled = ref(false)
 const aiChecked = ref(false)
 
@@ -28,6 +29,10 @@ function initState() {
     code: q.starter || '',
     done: false, passed: false, output: '', running: false,
     submissionId: null, review: null, reviewing: false, reviewErr: '',
+  }))
+  subjects.value = props.questions.map(() => ({
+    answer: '', done: false, passed: false, score: null,
+    summary: '', suggestions: [], running: false, err: '', selfChecked: false,
   }))
 }
 watch(() => props.questions, initState, { immediate: true })
@@ -51,6 +56,7 @@ const graded = computed(() =>
   props.questions.map((q, i) => {
     if (q.kind === 'blank') return blanks.value[i].done
     if (q.kind === 'code') return codes.value[i].done
+    if (q.kind === 'subjective') return subjects.value[i].done
     return picks.value[i] !== null
   })
 )
@@ -61,6 +67,7 @@ const isCorrect = computed(() =>
   props.questions.map((q, i) => {
     if (q.kind === 'blank') return blanks.value[i].ok
     if (q.kind === 'code') return codes.value[i].passed
+    if (q.kind === 'subjective') return subjects.value[i].passed
     return picks.value[i] === q.answer
   })
 )
@@ -125,6 +132,44 @@ async function runCode(qi) {
   if (c.passed && aiEnabled.value && c.submissionId) requestReview(qi)
 }
 
+// 主观题：AI 批改（配置后端时）或自评模式
+async function gradeSubjective(qi) {
+  const q = props.questions[qi]
+  const s = subjects.value[qi]
+  if (s.running || s.done) return
+  if (!s.answer.trim()) return
+  s.running = true
+  s.err = ''
+  try {
+    const res = await fetch('/api/grade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kp_id: props.kpId || q.kp, answer: s.answer }),
+    })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d.message || `HTTP ${res.status}`)
+    if (d.mode === 'ai') {
+      s.done = true
+      s.passed = !!d.passed
+      s.score = d.score
+      s.summary = d.summary || ''
+      s.suggestions = d.suggestions || []
+    } else {
+      // 自评模式：先展示参考答案，由学习者对照后自判
+      s.done = true
+      s.passed = false
+      s.summary = '对照下方参考答案自评：覆盖要点即点击「我答对了」。'
+      s.suggestions = []
+    }
+  } catch (e) {
+    s.done = false
+    s.err = String(e.message || e)
+  }
+  s.running = false
+  notify()
+  if (allCorrect.value) emit('passed')
+}
+
 async function requestReview(qi) {
   const c = codes.value[qi]
   if (!c.submissionId || c.reviewing) return
@@ -152,6 +197,15 @@ function reset() {
   notify()
 }
 
+// 自评模式：学习者对照参考答案后的判定
+function selfVerify(qi, ok) {
+  const s = subjects.value[qi]
+  if (!s.done) return
+  s.passed = ok
+  notify()
+  if (allCorrect.value) emit('passed')
+}
+
 function stateLabel(i) {
   if (!graded.value[i]) return ''
   return isCorrect.value[i] ? '✓ 通过' : '✗ 未通过'
@@ -166,8 +220,8 @@ defineExpose({ correctCount, allAnswered, allCorrect })
       <!-- 题干 -->
       <div class="quiz-q t-desc c-text">
         {{ qi + 1 }}.
-        <span class="chip quiz-kind">{{ { choice: '选择', blank: '填空', code: '编程' }[q.kind || 'choice'] }}</span>
-        {{ q.kind === 'code' ? q.prompt : q.q }}
+        <span class="chip quiz-kind">{{ { choice: '选择', blank: '填空', code: '编程', subjective: '主观' }[q.kind || 'choice'] }}</span>
+        {{ q.kind === 'code' || q.kind === 'subjective' ? q.prompt : q.q }}
       </div>
 
       <!-- 选择题 -->
@@ -202,6 +256,40 @@ defineExpose({ correctCount, allAnswered, allCorrect })
         <span v-if="blanks[qi].done" class="blank-verdict" :class="blanks[qi].ok ? 'c-ok' : 'c-bad'">
           {{ blanks[qi].ok ? '✓ 正确' : '✗ 不对，再想想' }}
         </span>
+      </div>
+
+      <!-- 主观题 -->
+      <div v-else-if="q.kind === 'subjective'" class="quiz-code">
+        <textarea
+          v-model="subjects[qi].answer"
+          class="code-editor"
+          rows="5"
+          :disabled="subjects[qi].done"
+          placeholder="用自己的话作答（要点覆盖即可，不必逐字一致）…"
+        />
+        <div class="code-actions">
+          <button
+            v-if="!subjects[qi].done"
+            class="btn btn-sm"
+            :disabled="subjects[qi].running || !subjects[qi].answer.trim()"
+            @click="gradeSubjective(qi)"
+          >
+            {{ subjects[qi].running ? '⏳ 批改中…' : aiEnabled ? '🤖 提交批改' : '提交并查看参考答案' }}
+          </button>
+          <span v-if="subjects[qi].done" class="code-verdict" :class="subjects[qi].passed ? 'c-ok' : 'c-bad'">
+            {{ subjects[qi].passed ? '✓ 通过' : '✗ 未通过' }}
+            <span v-if="subjects[qi].score !== null" class="t-num">（{{ subjects[qi].score }} 分）</span>
+          </span>
+        </div>
+        <div v-if="subjects[qi].err" class="quiz-why"><b>批改失败：</b>{{ subjects[qi].err }}</div>
+        <div v-if="subjects[qi].done" class="quiz-why">
+          <template v-if="subjects[qi].summary"><b>评语：</b>{{ subjects[qi].summary }}<br /></template>
+          <b>参考答案要点：</b>{{ q.reference }}
+          <div v-if="!subjects[qi].passed && !aiEnabled" class="code-actions" style="margin-top: 8px">
+            <button class="btn btn-sm" @click="selfVerify(qi, true)">我覆盖了这些要点</button>
+            <button class="btn btn-sm btn-ghost" @click="reset">重做</button>
+          </div>
+        </div>
       </div>
 
       <!-- 编程题 -->

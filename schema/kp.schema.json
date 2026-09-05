@@ -69,11 +69,11 @@
     "quiz": {
       "type": "array",
       "minItems": 1,
-      "description": "测试用例：支持三种题型（kind 缺省为 choice 选择题）。答对全部题目会自动点亮『掌握』状态。编程题由服务端 rustc 沙箱编译运行，并可经 AI 后端（本地 Ollama / OpenAI 兼容 API）做代码结构评价。",
+      "description": "测试用例，四种题型（kind 缺省为 choice）。配比建议：每知识点选择题 ≤1 道；优先 blank 填空 / subjective 主观 / code 编程；编程类知识点 code 占比 ≥ 一半。配置 AI 后端时主观题自动批改、编程题附带代码结构评价。答对全部题目会自动点亮『掌握』状态。",
       "items": {
         "anyOf": [
           {
-            "title": "选择题（kind 缺省 = choice）",
+            "title": "选择题（kind 缺省 = choice，建议每知识点 ≤1 道）",
             "type": "object",
             "additionalProperties": false,
             "required": ["q", "opts", "answer", "why"],
@@ -95,6 +95,18 @@
               "q": { "type": "string", "minLength": 8, "description": "题干，用 __ 标出空位" },
               "accept": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "可接受答案列表（比对时忽略大小写与首尾空格）" },
               "why": { "type": "string", "minLength": 4, "description": "解析" }
+            }
+          },
+          {
+            "title": "主观题（subjective，任意领域通用）",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "prompt", "reference", "why"],
+            "properties": {
+              "kind": { "const": "subjective" },
+              "prompt": { "type": "string", "minLength": 8, "description": "题面：要求阐述/解释/对比/分析什么" },
+              "reference": { "type": "string", "minLength": 8, "description": "参考答案要点（分点书写）。配置 AI 时作为批改基准打分；未配置 AI 时展示给学习者自评" },
+              "why": { "type": "string", "minLength": 4, "description": "解析：本题考察的核心理解" }
             }
           },
           {

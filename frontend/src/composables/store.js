@@ -12,6 +12,7 @@ export function useRoute() {
     const parts = (hash.value.replace(/^#/, '') || '/').split('/').filter(Boolean)
     if (parts[0] === 'kp' && parts[1]) return { name: 'kp', id: parts[1] }
     if (parts[0] === 'module' && parts[1]) return { name: 'module', id: parts[1] }
+    if (parts[0] === 'ai') return { name: 'ai' }
     return { name: 'home' }
   })
 }

@@ -69,15 +69,18 @@ pub struct Chapter {
 }
 
 /// 一道测验题。KP 自带测验的 `kp` 字段由所属知识点推导，关卡测验必须显式标注。
-/// 测验题：支持三种题型（kind 区分，缺省 choice 向后兼容）。
-/// - choice 选择题：q + opts + answer(下标) + why
-/// - blank  填空题：q 中用 __ 标空位 + accept 为可接受答案（比较前 trim + 小写）
-/// - code   编程题：prompt 题面 + starter 起始代码 + test_code 追加测试
+/// 支持四种题型（kind 区分，缺省 choice 向后兼容）。配比建议：
+/// 选择题 ≤1 道；优先 blank 填空 / subjective 主观 / code 编程；编程类知识点 code ≥ 一半。
+/// - choice     选择题：q + opts + answer(下标) + why
+/// - blank      填空题：q 中用 __ 标空位 + accept 为可接受答案（比较前 trim + 小写）
+/// - subjective 主观题：prompt 题面 + reference 参考答案要点。
+///   配置 AI 时由 AI 对照 reference 批改打分；未配置时展示参考答案自评。
+/// - code       编程题：prompt 题面 + starter 起始代码 + test_code 追加测试
 ///   （服务端把 starter + test_code 合并后 rustc --test 编译运行，退出码 0 = 通过）
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct QuizItem {
     #[serde(default)]
-    pub kind: String, // "" | "choice" | "blank" | "code"
+    pub kind: String, // "" | "choice" | "blank" | "subjective" | "code"
     #[serde(default)]
     pub q: String,
     #[serde(default)]
@@ -93,6 +96,8 @@ pub struct QuizItem {
     #[serde(default)]
     pub test_code: String,
     #[serde(default)]
+    pub reference: String,
+    #[serde(default)]
     pub why: String,
     #[serde(default)]
     pub kp: String,
@@ -103,6 +108,7 @@ impl QuizItem {
         match self.kind.as_str() {
             "blank" => "blank",
             "code" => "code",
+            "subjective" => "subjective",
             _ => "choice",
         }
     }
@@ -451,6 +457,16 @@ fn validate_quiz(q: &QuizItem, owner: &str, errors: &mut Vec<String>) {
             }
             if q.accept.iter().all(|a| a.trim().is_empty()) {
                 errors.push(format!("{owner} 的填空题缺少可接受答案 (accept): {}", q.q));
+            }
+        }
+        "subjective" => {
+            if q.prompt.trim().is_empty() {
+                errors.push(format!("{owner} 的主观题缺少题面 (prompt)"));
+            }
+            if q.reference.trim().is_empty() {
+                errors.push(format!(
+                    "{owner} 的主观题缺少参考答案要点 (reference)——它是 AI 批改与自评的基准"
+                ));
             }
         }
         "code" => {
