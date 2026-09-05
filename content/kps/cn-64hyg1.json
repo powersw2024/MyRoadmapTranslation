@@ -1,0 +1,59 @@
+{
+  "kps": [
+    {
+      "id": "cn-64hyg1jf",
+      "title": "剑指 Offer 9：用两个栈实现队列",
+      "difficulty": 2,
+      "minutes": 20,
+      "summary": "in 栈管入队、out 栈管出队：两次「反转」叠加恢复先进先出；out 空时才批量倒栈是均摊 O(1) 的关键。",
+      "outline": [
+        "题目：用两个栈实现队列的 push 与 pop（先进先出）",
+        "原理：元素进 in 栈被反转一次；出队时把 in 全部倒入 out 再反转一次，两次负负得正，出栈顺序即最初的入队顺序",
+        "关键规则：只有 out 栈为空时才做「倒栈」，且必须一次把 in 倒空——否则顺序错乱；这是均摊 O(1) 的来源（每个元素一生最多进出 4 次）",
+        "Python 实现（已验证：push 1,2,3 → pop 得 1,2；push 4 → pop 得 3,4）：list.append/pop 即栈",
+        "Rust 实现（已验证输出 Some(1) Some(2) / Some(3) Some(4)）：结构体持有两个 Vec<i32>；空队列用 Option 返回 None 替代 Java 的抛异常（Rust 惯例：用类型表达失败）",
+        "Java 原版对照：Stack<Integer> 已被官方标注不推荐（继承 Vector 的设计缺陷），Java 现代写法用 Deque<Integer>——学习时注意区分「教学代码」与「工程惯例」",
+        "复杂度：push O(1)；pop 均摊 O(1)（倒栈成本被分摊到每个元素）"
+      ],
+      "prereqs": [],
+      "task": "用 Python 与 Rust 各实现一版，按「push1 push2 pop push3 pop pop pop(空)」的序列跑通：前三步应得到 1、2、3，最后一 pop 两版都应优雅处理空队列（Python 抛 IndexError / Rust 返回 None）——行为一致即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CS-Notes-master/notes/9. 用两个栈实现队列.md",
+          "u": "https://github.com/CyC2018/CS-Notes/blob/master/notes/9.%20%E7%94%A8%E4%B8%A4%E4%B8%AA%E6%A0%88%E5%AE%9E%E7%8E%B0%E9%98%9F%E5%88%97.md"
+        },
+        {
+          "t": "牛客网：用两个栈实现队列（在线判题）",
+          "u": "https://www.nowcoder.com/practice/54275ddae22f475981afa2244dd448c6?tpId=13&tqId=11158"
+        },
+        {
+          "t": "Java 文档：为什么应优先使用 Deque 而非 Stack",
+          "u": "https://docs.oracle.com/javase/8/docs/api/java/util/Deque.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么「out 栈非空时直接 pop，绝不倒栈」是正确性要求而不是性能优化？",
+          "opts": [
+            "只是碰巧更快",
+            "若在 out 非空时倒入新元素，新元素会压在旧元素上面，下一次 pop 的顺序就不再是先进先出",
+            "因为 in 栈不允许为空",
+            "因为倒栈会丢失数据"
+          ],
+          "answer": 1,
+          "why": "out 中元素的顺序已经就绪；中途倒栈会把较新的元素压到这些元素之上，破坏队列语义。必须等 out 清空后再整体倒栈。"
+        },
+        {
+          "kind": "choice",
+          "q": "两栈队列的 pop 操作最坏情况与均摊复杂度分别是？",
+          "opts": ["O(1)，O(1)", "O(N)，O(N)", "O(N)，均摊 O(1)", "O(log N)，O(1)"],
+          "answer": 2,
+          "why": "out 空时要一次性倒 N 个元素，最坏 O(N)；但每个元素从入队到出队最多经历常数次搬运，均摊 O(1)。"
+        }
+      ],
+      "domain": "算法",
+      "tags": ["栈", "队列", "设计", "剑指Offer"],
+      "author": "powersw2024"
+    }
+  ]
+}
