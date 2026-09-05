@@ -1,0 +1,59 @@
+{
+  "kps": [
+    {
+      "id": "sg-5fpwqi8f",
+      "title": "计算机科学经典教材选书指南",
+      "difficulty": 1,
+      "minutes": 30,
+      "summary": "按系统、网络、分布式、数据库、编译等方向整理的经典教材与开源书单，掌握「先开源、后权威」的选书方法。",
+      "outline": [
+        "资源汇总类入口：Free Programming Books（开源编程书大全）、各语言 Book Guide（C/C++/Python）、CS 教材推荐列表",
+        "系统入门：CSAPP《深入理解计算机系统》、《Principles of Computer System Design》",
+        "操作系统：《现代操作系统：原理与实现》（上海交大开源）、OSTEP（免费在线）、《Modern Operating Systems》",
+        "网络：《Computer Networks: A Systems Approach》（开源在线）、《Computer Networking: A Top-Down Approach》自顶向下法",
+        "分布式：《DDIA 数据密集型应用系统设计》（有开源中文翻译）、Patterns of Distributed Systems",
+        "数据库：《Architecture of a Database System》、《Readings in Database Systems》（Red Book）、《数据库系统概念》第7版",
+        "编译：《Crafting Interpreters》（官网全文免费，有开源中文翻译）、龙书《Compilers: Principles, Techniques, and Tools》",
+        "选书方法：同方向先中文后英文、先开源后闭源、由基础到深入——对 Rust/Python 学习者，OSTEP、Crafting Interpreters、DDIA 均可配合两门语言实践"
+      ],
+      "prereqs": [],
+      "task": "从书单中选定你未来 3 个月要读的一本开源教材（推荐 OSTEP 或 Crafting Interpreters），打开其官方网站确认全文可访问，并在 RustWay 中为它创建一个学习知识点（写明 summary 与验证任务）——能成功创建并保存即完成验证。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/好书推荐.md",
+          "u": "https://github.com/EbookFoundation/free-programming-books"
+        },
+        {
+          "t": "Free Programming Books（EbookFoundation，开源编程书汇总）",
+          "u": "https://github.com/EbookFoundation/free-programming-books"
+        },
+        {
+          "t": "Crafting Interpreters 官网（全文免费阅读）",
+          "u": "https://craftinginterpreters.com/contents.html"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "按本指南的选书顺序要求，同方向下应优先选择哪类资源？",
+          "opts": [
+            "先中文后英文，同语言先开源后闭源",
+            "先英文后中文，先闭源后开源",
+            "只看豆瓣评分高低",
+            "只挑页数最少的"
+          ],
+          "answer": 0,
+          "why": "文件头部注释明确了板块内排序：先中文后英文，同种语言先开源后闭源，最后按从基础到深入或字母序。"
+        },
+        {
+          "kind": "blank",
+          "q": "书单中可在线全文免费阅读、并带你手写一个解释器的编译入门书是《Crafting __》。这是学 Rust/Python 之外理解语言实现的经典途径。",
+          "accept": ["interpreters", "Interpreters"],
+          "why": "Crafting Interpreters 官网提供全文免费阅读，通过手写解释器讲透语言实现，并有开源中文翻译项目。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["教材", "书单", "计算机科学"],
+      "author": "powersw2024"
+    }
+  ]
+}

@@ -85,8 +85,8 @@ def cmd_register(output: str, srcs: list[str]) -> None:
     for kp_id in kp_ids:
         if not ID_RE.match(kp_id):
             sys.exit(f"错误：非法 id {kp_id}")
-    known = {e["kp_ids"] for e in m["entries"]} if m["entries"] else set()
-    dup = {e for e in m["entries"] for i in e["kp_ids"] if i in kp_ids}
+    known_ids = {i for e in m["entries"] for i in e["kp_ids"]}
+    dup = known_ids & set(kp_ids)
     if dup:
         sys.exit(f"错误：id 重复登记: {dup}")
     rel_srcs = []
