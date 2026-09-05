@@ -47,7 +47,7 @@ const totalPlaced = computed(() => {
   </header>
 
   <main class="container">
-    <div v-if="manifestError" class="card info-card" style="color: var(--bad)">{{ manifestError }}</div>
+    <div v-if="manifestError" class="card info-card c-bad">{{ manifestError }}</div>
 
     <!-- 骨架屏：数据加载中的结构占位，避免空白闪烁 -->
     <div v-else-if="!manifest" class="skeleton-page" aria-label="加载中">
@@ -76,6 +76,6 @@ const totalPlaced = computed(() => {
   <footer class="footer">
     <span>RustWay v{{ manifest?.version || '…' }} — 内容与代码分离 · 新增知识点无需改代码 · cargo test 守护内容质量</span>
     <a href="https://github.com/powersw2024/rustway" target="_blank" rel="noopener">GitHub ↗</a>
-    <span style="opacity: 0.5">当前主题：{{ theme === 'dark' ? '暗色' : '亮色' }}</span>
+    <span class="c-faint">当前主题：{{ theme === 'dark' ? '暗色' : '亮色' }}</span>
   </footer>
 </template>

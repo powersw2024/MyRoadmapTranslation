@@ -1,10 +1,12 @@
 <script setup>
 import { computed } from 'vue'
-import { useManifest, useProgress, go } from '../composables/store'
+import { useManifest, useProgress, useDelayedFlag, go } from '../composables/store'
 import GraphCanvas from '../components/GraphCanvas.vue'
+import CountUp from '../components/CountUp.vue'
 
 const { manifest } = useManifest()
 const { progress } = useProgress()
+const barsGo = useDelayedFlag(120)
 
 const moduleProgress = computed(() => {
   const map = {}
@@ -21,27 +23,37 @@ const moduleProgress = computed(() => {
   }
   return map
 })
+
+const stats = computed(() => {
+  if (!manifest.value) return []
+  const s = manifest.value.stats
+  return [
+    { icon: '📦', label: '模块', value: s.modules },
+    { icon: '📚', label: '章节', value: s.chapters },
+    { icon: '🧩', label: '知识点', value: s.kps },
+    { icon: '📝', label: '测验题', value: s.quiz },
+    { icon: '⏱️', label: '预计学习时长', value: Math.round(s.minutes / 60), suffix: 'h+' },
+  ]
+})
 </script>
 
 <template>
   <div v-if="manifest">
     <!-- Hero -->
     <div class="stagger" style="animation-delay: 0ms; margin-bottom: 16px">
-      <h1 style="font-size: 26px; margin-bottom: 6px">
-        {{ manifest.title }}
-      </h1>
-      <p style="color: var(--muted); font-size: 14px; line-height: 1.7; max-width: 860px">
-        {{ manifest.subtitle }}
-      </p>
+      <h1 class="hero-title">{{ manifest.title }}</h1>
+      <p class="hero-sub">{{ manifest.subtitle }}</p>
     </div>
 
-    <!-- 统计 -->
+    <!-- 统计（数字滚动动效） -->
     <div class="stats-row stagger" style="animation-delay: 60ms">
-      <div class="card stat-card"><span class="num">{{ manifest.stats.modules }}</span><span class="label">模块</span></div>
-      <div class="card stat-card"><span class="num">{{ manifest.stats.chapters }}</span><span class="label">章节</span></div>
-      <div class="card stat-card"><span class="num">{{ manifest.stats.kps }}</span><span class="label">知识点</span></div>
-      <div class="card stat-card"><span class="num">{{ manifest.stats.quiz }}</span><span class="label">测验题</span></div>
-      <div class="card stat-card"><span class="num">{{ Math.round(manifest.stats.minutes / 60) }}h+</span><span class="label">预计学习时长</span></div>
+      <div v-for="(st, i) in stats" :key="st.label" class="card stat-card">
+        <span class="icon">{{ st.icon }}</span>
+        <span class="num num-pop t-num" :style="{ animationDelay: 120 + i * 70 + 'ms' }">
+          <CountUp :value="st.value" />{{ st.suffix || '' }}
+        </span>
+        <span class="label">{{ st.label }}</span>
+      </div>
     </div>
 
     <!-- 知识图谱（主角） -->
@@ -49,16 +61,16 @@ const moduleProgress = computed(() => {
 
     <!-- 方法论 + 待编排 -->
     <div class="home-grid">
-      <div class="card info-card stagger" style="animation-delay: 120ms">
+      <div class="card info-card pad stagger" style="animation-delay: 120ms">
         <div class="section-title">🧪 科学学习方法（本教程的编排原则）</div>
-        <p class="intro-text">{{ manifest.methodology.intro }}</p>
+        <p class="intro-text t-desc c-muted">{{ manifest.methodology.intro }}</p>
         <ul>
           <li v-for="(r, i) in manifest.methodology.rules" :key="i">{{ r }}</li>
         </ul>
       </div>
-      <div class="card info-card stagger" style="animation-delay: 180ms">
+      <div class="card info-card pad stagger" style="animation-delay: 180ms">
         <div class="section-title">📥 待编排知识点（{{ manifest.unplaced.length }}）</div>
-        <p class="intro-text">
+        <p class="intro-text t-desc c-muted">
           这些知识点已通过内容校验，但尚未挂入任何章节——这正是「任意插入」能力的体现：新建 JSON 文件即可入库，随时编入任意章节。
         </p>
         <div class="unplaced-list" v-if="manifest.unplaced.length">
@@ -86,13 +98,17 @@ const moduleProgress = computed(() => {
         </div>
         <div class="m-sub">{{ m.subtitle }}</div>
         <div class="m-progress">
-          <div :style="{ width: (moduleProgress[m.id]?.pct || 0) + '%', background: m.color }" />
+          <div
+            class="grow-bar"
+            :class="{ go: barsGo }"
+            :style="{ '--bar-w': (moduleProgress[m.id]?.pct || 0) + '%', background: m.color }"
+          />
         </div>
         <div class="m-meta">
           <span>{{ m.chapters.length }} 章</span>
           <span>{{ m.chapters.reduce((s, c) => s + c.kps.length, 0) }} 个知识点</span>
-          <span v-if="moduleProgress[m.id]?.done" style="color: var(--ok)">已掌握 {{ moduleProgress[m.id].done }}</span>
-          <span style="margin-left: auto; color: var(--accent)">进入 →</span>
+          <span v-if="moduleProgress[m.id]?.done" class="c-ok">已掌握 {{ moduleProgress[m.id].done }}</span>
+          <span class="c-accent" style="margin-left: auto">进入 →</span>
         </div>
       </div>
     </div>

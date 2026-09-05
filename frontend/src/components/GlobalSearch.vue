@@ -77,7 +77,7 @@ function onKey(e) {
       >
         <span class="dot" :style="{ background: k.moduleColor }" />
         <span>{{ k.title }}</span>
-        <span style="margin-left: auto; color: var(--faint); font-size: 11px">{{ k.moduleName }}</span>
+        <span class="t-caption c-faint" style="margin-left: auto">{{ k.moduleName }}</span>
       </div>
     </div>
   </div>

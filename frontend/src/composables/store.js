@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 // ---------- Hash 路由（轻量，无额外依赖） ----------
 const hash = ref(window.location.hash)
@@ -108,4 +108,42 @@ export function useTheme() {
     localStorage.setItem('rustway.theme', theme.value)
   }
   return { theme, toggle }
+}
+
+// ---------- 数字滚动动效（count-up） ----------
+const REDUCED =
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+export function useCountUp(getTarget, duration = 900) {
+  const display = ref(0)
+  let raf = 0
+  watch(
+    getTarget,
+    (to, from) => {
+      cancelAnimationFrame(raf)
+      const b = Number(to) || 0
+      if (REDUCED) {
+        display.value = b
+        return
+      }
+      const a = Number(from) || 0
+      const start = performance.now()
+      const step = t => {
+        const p = Math.min((t - start) / duration, 1)
+        display.value = Math.round(a + (b - a) * (1 - Math.pow(1 - p, 3)))
+        if (p < 1) raf = requestAnimationFrame(step)
+      }
+      raf = requestAnimationFrame(step)
+    },
+    { immediate: true }
+  )
+  return display
+}
+
+// ---------- 延迟点火器（进度条生长等 CSS 过渡的触发） ----------
+export function useDelayedFlag(ms = 60) {
+  const on = ref(false)
+  onMounted(() => setTimeout(() => (on.value = true), ms))
+  return on
 }

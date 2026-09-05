@@ -12,7 +12,7 @@
 //! 安全约定：本程序不发起出站请求、不读取任何凭据；仅监听本地地址。
 
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Json;
 use axum::routing::get;
 use axum::Router;
@@ -20,7 +20,10 @@ use rustway::Store;
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
+use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::trace::TraceLayer;
 
 fn content_dir() -> PathBuf {
     PathBuf::from(std::env::var("RUSTWAY_CONTENT").unwrap_or_else(|_| "content".into()))
@@ -104,11 +107,21 @@ async fn serve() {
 
     let state = Arc::new(store);
     let static_dir = std::env::var("RUSTWAY_STATIC").unwrap_or_else(|_| "frontend/dist".into());
+    // 静态资源带缓存头（Vite 产物含内容哈希，可放心缓存）
+    let static_service = tower::ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=3600"),
+        ))
+        .service(ServeDir::new(static_dir).append_index_html_on_directories(true));
+
     let app = Router::new()
         .route("/api/manifest", get(manifest))
         .route("/api/kp/{id}", get(kp_detail))
         .route("/api/health", get(health))
-        .fallback_service(ServeDir::new(static_dir).append_index_html_on_directories(true))
+        .fallback_service(static_service)
+        .layer(CompressionLayer::new()) // gzip/br：manifest 与 dist 资源瘦身
+        .layer(TraceLayer::new_for_http()) // 请求日志 → tracing 输出
         .with_state(state);
 
     let port: u16 = std::env::var("RUSTWAY_PORT")

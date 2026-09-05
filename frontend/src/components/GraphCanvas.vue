@@ -60,6 +60,83 @@ function frameGuard(now) {
 
 const offModules = computed(() => hiddenModules.value)
 
+// ---------- 动效引擎（canvas 内节点无法用 CSS 动画，全部在 reducer 层实现） ----------
+// 入场 stagger 弹出 / 悬停平滑放大 / 掌握光环呼吸 / 点亮闪光；空闲时 rAF 自动停。
+const REDUCED_MOTION =
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const motion = {
+  appearStart: 0, // 入场起始时间戳（0 = 未启用/已完成）
+  appearDur: 520, // 单节点弹出时长
+  stagger: 3,     // 每节点延迟 ms
+  hoverNode: null,
+  hoverP: 0,      // 悬停放大进度 0..1
+  hoverDir: 0,    // 1 进入 / -1 离开
+  flash: new Map(), // node id -> 点亮时间戳
+  running: false,
+}
+
+const clamp01 = x => (x < 0 ? 0 : x > 1 ? 1 : x)
+// 回弹缓动：节点"弹出"的弹性感
+const easeOutBack = x => {
+  const c1 = 1.70158, c3 = c1 + 1
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2)
+}
+const easeOutCubic = x => 1 - Math.pow(1 - x, 3)
+
+function startMotion() {
+  if (motion.running || REDUCED_MOTION || !renderer) return
+  motion.running = true
+  let lastRefresh = 0
+  const tick = t => {
+    if (!renderer || !graph) { motion.running = false; return }
+    const now = performance.now()
+
+    // 悬停 tween（140ms 单程）
+    if (motion.hoverDir !== 0) {
+      motion.hoverP = clamp01(motion.hoverP + (motion.hoverDir * (t - (tick._pt || t)) / 140))
+      if (motion.hoverP === 1 && motion.hoverDir > 0) motion.hoverDir = 0
+      if (motion.hoverP === 0 && motion.hoverDir < 0) motion.hoverDir = 0
+    }
+    tick._pt = t
+
+    // 入场是否仍在进行
+    const maxDelay = graph.order * motion.stagger
+    const appearing = motion.appearStart > 0 && now < motion.appearStart + motion.appearDur + maxDelay
+
+    // 掌握点亮的闪光过期清理
+    for (const [id, ts] of motion.flash) if (now - ts > 700) motion.flash.delete(id)
+
+    // 呼吸/闪光需要持续重绘；限 ~24fps 省电（悬停/入场 tween 期间每帧刷）
+    const needsContinuous = motion.hoverDir !== 0 || appearing || motion.flash.size > 0
+    const masteredCount = Object.keys(progress.value.mastered).length
+    const breathe = masteredCount > 0 || motion.flash.size > 0
+    if (needsContinuous || (breathe && t - lastRefresh > 42)) {
+      lastRefresh = t
+      renderer.refresh()
+    }
+
+    const busy = needsContinuous || breathe
+    if (busy) requestAnimationFrame(tick)
+    else motion.running = false
+  }
+  requestAnimationFrame(tick)
+}
+
+// 掌握状态 diff → 新点亮的节点触发闪光
+let prevMastered = {}
+function watchMasteredFlashes() {
+  const cur = progress.value.mastered
+  for (const id of Object.keys(cur)) {
+    if (!prevMastered[id] && graph?.hasNode(id)) {
+      motion.flash.set(id, performance.now())
+    }
+  }
+  prevMastered = { ...cur }
+  startMotion()
+}
+
 // ---------- 工具 ----------
 function cssVar(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -80,6 +157,7 @@ function buildGraph() {
   graph = new Graph({ multi: false, type: 'directed' })
 
   const mods = manifest.value.modules
+  let enterIdx = 0
   for (const m of mods) {
     for (const c of m.chapters) {
       for (const k of c.kps) {
@@ -90,6 +168,7 @@ function buildGraph() {
           color: m.color,
           difficulty: k.difficulty,
           size: 4 + k.difficulty * 2.4,
+          enter: enterIdx++,
           x: 0, y: 0,
         })
       }
@@ -192,22 +271,48 @@ function createRenderer() {
     labelSize: 12,
     nodeReducer: (node, data) => {
       const res = { ...data }
+      const now = performance.now()
       const mastered = progress.value.mastered[node]
       const read = progress.value.read[node]
-      res.type = mastered ? 'bordered' : 'circle'
+
+      // 统一尺寸因子：入场弹出 × 悬停放大 × 呼吸 × 闪光
+      let scale = 1
+
+      // 入场：按序 stagger 弹出（easeOutBack 回弹）
+      if (motion.appearStart > 0 && !REDUCED_MOTION) {
+        const delay = (data.enter || 0) * motion.stagger
+        const p = clamp01((now - motion.appearStart - delay) / motion.appearDur)
+        if (p <= 0) {
+          res.hidden = true
+          return res
+        }
+        if (p < 1) scale *= Math.max(easeOutBack(p), 0.001)
+      }
+
+      // 悬停：tween 进度驱动的平滑放大
+      if (motion.hoverP > 0 && (hovered === node || dragged === node || motion.hoverNode === node)) {
+        scale *= 1 + 0.45 * easeOutCubic(motion.hoverP)
+      }
+
       if (mastered) {
+        res.type = 'bordered'
         res.borderColor = '#fbbf24'
-        res.borderSize = 2.4
-        res.size = data.size * 1.25
+        res.borderSize = 2.3 + 0.7 * (0.5 + 0.5 * Math.sin(now / 420))
         res.forceLabel = true
+        scale *= 1 + 0.05 * Math.sin(now / 420)
       } else {
         res.color = read ? withAlpha(data.color, 0.78) : withAlpha(data.color, 0.42)
       }
-      if (hovered === node) {
-        res.size = data.size * 1.45
-        res.forceLabel = true
-        res.zIndex = 1
+
+      // 点亮闪光：先膨胀后回落的单次脉冲
+      const flashTs = motion.flash.get(node)
+      if (flashTs !== undefined) {
+        const fp = clamp01((now - flashTs) / 700)
+        scale *= 1 + 0.9 * Math.sin(fp * Math.PI)
       }
+
+      res.size = data.size * scale
+      if (hovered === node) res.zIndex = 1
       if (dragged === node) res.forceLabel = true
       if (hiddenModules.value.has(data.moduleId)) res.hidden = true
       // LOD 降级：1 级隐藏非活跃标签（forceLabel 优先级更高，悬停/掌握仍显示）
@@ -234,9 +339,12 @@ function createRenderer() {
     },
   })
 
-  // 悬停 → 提示框 + 邻接高亮
+  // 悬停 → 提示框 + 邻接高亮 + 平滑放大 tween
   renderer.on('enterNode', e => {
     hovered = e.node
+    motion.hoverNode = e.node
+    motion.hoverDir = 1
+    startMotion()
     renderer.refresh({ skipIndexation: false })
     tip.value = {
       show: true,
@@ -248,7 +356,9 @@ function createRenderer() {
   })
   renderer.on('leaveNode', () => {
     hovered = null
+    motion.hoverDir = -1
     tip.value.show = false
+    startMotion()
     renderer.refresh()
   })
 
@@ -327,6 +437,10 @@ onMounted(async () => {
   runLayoutSync(170)
   renderer.refresh()
   recountVisible()
+  // 入场动画：布局落定后按序弹出
+  prevMastered = { ...progress.value.mastered }
+  if (!REDUCED_MOTION) motion.appearStart = performance.now() + 80
+  startMotion()
   lastFrame = performance.now()
   rafId = requestAnimationFrame(frameGuard)
 })
@@ -337,8 +451,11 @@ onBeforeUnmount(() => {
   if (renderer) { renderer.kill(); renderer = null }
 })
 
-// 进度 / 主题变化 → 重绘（读取最新颜色与掌握状态）
-watch(progress, () => renderer?.refresh(), { deep: true })
+// 进度变化 → 闪光检测 + 重绘；主题变化 → 重绘（读取最新颜色）
+watch(progress, () => {
+  watchMasteredFlashes()
+  renderer?.refresh()
+}, { deep: true })
 watch(theme, () => renderer?.refresh())
 
 const legend = computed(() => {
@@ -361,7 +478,7 @@ const legend = computed(() => {
     <div ref="container" class="sigma-container" />
 
     <div class="graph-legend">
-      <div style="font-size: 11px; font-weight: 700; color: var(--faint); letter-spacing: 1px">模块图例（点击隐藏）</div>
+      <div class="t-caption c-faint" style="font-weight: 700">模块图例（点击隐藏）</div>
       <div
         v-for="m in legend"
         :key="m.id"
@@ -371,15 +488,15 @@ const legend = computed(() => {
         @click="toggleModule(m.id)"
       >
         <span>{{ m.icon }}</span>
-        <span style="color: var(--text); flex: 1">{{ m.title }}</span>
+        <span class="c-text" style="flex: 1">{{ m.title }}</span>
         <span class="legend-bar"><div :style="{ width: m.total ? (m.done / m.total) * 100 + '%' : 0 }" /></span>
-        <span style="font-size: 10px">{{ m.done }}/{{ m.total }}</span>
+        <span class="t-caption t-num">{{ m.done }}/{{ m.total }}</span>
       </div>
     </div>
 
     <div class="graph-stats">
       {{ visibleCount }} 个知识点 · {{ graph ? graph.order : 0 }} 节点 / {{ graph ? graph.size : 0 }} 边 · 拖动节点 / 滚轮缩放 / 双击复位
-      <span v-if="lodLevel > 0" style="color: var(--gold)"> · 性能模式 L{{ lodLevel }}</span>
+      <span v-if="lodLevel > 0" class="c-gold"> · 性能模式 L{{ lodLevel }}</span>
     </div>
 
     <Teleport to="body">
