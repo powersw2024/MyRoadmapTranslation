@@ -1,0 +1,64 @@
+{
+  "kps": [
+    {
+      "id": "sg-glb6w7ub",
+      "title": "CMU 15-445：数据库系统实战（BusTub）",
+      "difficulty": 3,
+      "minutes": 600,
+      "summary": "Andy Pavlo 主讲的数据库入门名课：在教学数据库 BusTub 中亲手实现缓冲池、B+ 树索引、执行器与并发控制，资源全开源。",
+      "outline": [
+        "课程定位：CMU 数据库入门课，Faculty 与 CMU Database Group 全开源课程设施（Autograder、Discord、讲义），体验接近本校学生",
+        "核心载体：教学型关系数据库 BusTub（C++ 编写的中小型项目，涵盖程序构建、代码规范、单元测试，本身是优秀开源学习样本）",
+        "四大 Project（近年版本）：#1 Buffer Pool Manager（内存管理）→ #2 B+ Tree（存储引擎索引）→ #3 Query Executors & Optimizer（算子与优化器）→ #4 Concurrency Control（并发控制）；早期学期曾含哈希索引、日志恢复",
+        "版本差异参考：Fall 2019 Project#2 为哈希索引、#4 为日志恢复；Spring 2023 把 Project#0 换成 Copy-On-Write Trie 并新增注册大小写函数任务；Fall 2019 的 Logging & Recovery 已 broken 不推荐做",
+        "正反馈机制：通过 shell.cpp 编译出 bustub-shell 实时观测自己实现的部件是否正确",
+        "对 Rust/Python 学习者的迁移：BusTub 的 B+ 树/缓冲池思想可用 Rust 重写（所有权天然防迭代器失效）；Python 则适合写对比测试脚本生成随机操作序列做差分验证",
+        "配套教材：Database System Concepts（数据库系统概念）；通关经验可见 xzhseh 的 Spring 2023 通关指北"
+      ],
+      "prereqs": ["sg-4tsh3lgy"],
+      "task": "在 Rust 中实现一个内存版 B+ 树（阶 ≥4）：支持 insert/search/scan，用 python3 生成 10 万条随机 (key, op) 序列，与 Python dict 基准做差分比对——两种实现的所有查询结果完全一致即通过（差分测试是数据库课程验证作业的标准手段）。",
+      "refs": [
+        {
+          "t": "来源文件：docs/CSStudyGuide-main/数据库系统/CMU15445.md",
+          "u": "https://15445.courses.cs.cmu.edu/fall2024/"
+        },
+        {
+          "t": "CMU 15-445 课程网站（Fall 2024）",
+          "u": "https://15445.courses.cs.cmu.edu/fall2024/"
+        },
+        {
+          "t": "BusTub 教学数据库（CMU Database Group 开源）",
+          "u": "https://github.com/cmu-db/bustub"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "近年 15-445 的四个 Project 按顺序对应数据库的哪些组件？",
+          "opts": [
+            "缓冲池 → B+ 树索引 → 执行器与优化器 → 并发控制",
+            "解析器 → 优化器 → 存储 → 备份",
+            "网络 → 安全 → 审计 → 容灾",
+            "哈希索引 → 日志 → 恢复 → 复制"
+          ],
+          "answer": 0,
+          "why": "近年课程要求学生在 BusTub 中依次实现 Buffer Pool Manager、B Plus Tree、Query Executors & Optimizer、Concurrency Control；哈希索引与日志恢复只出现在早期学期。"
+        },
+        {
+          "kind": "choice",
+          "q": "为什么 B+ 树比 B 树更适合数据库磁盘索引？",
+          "opts": [
+            "B+ 树每个节点更小",
+            "B+ 树叶子节点成链且数据全在叶子，范围扫描与磁盘按页读取友好",
+            "B+ 树不需要平衡",
+            "B+ 树插入无需分裂"
+          ],
+          "answer": 1,
+          "why": "B+ 树内部节点只存键、数据集中在有序链接的叶子层，范围查询沿叶链顺序扫描，与磁盘按页 I/O 特性高度契合；B+ 树同样需要平衡与分裂。"
+        }
+      ],
+      "domain": "课程导航",
+      "tags": ["数据库", "B+树", "并发控制", "课程导航"],
+      "author": "powersw2024"
+    }
+  ]
+}
