@@ -1,0 +1,6 @@
+/target
+frontend/node_modules
+*.log
+.DS_Store
+.mimosa/
+.playwright-mcp
